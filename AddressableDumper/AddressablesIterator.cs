@@ -10,7 +10,7 @@ namespace AddressableDumper
 {
     public static class AddressablesIterator
     {
-        static string[] _assetKeys = Array.Empty<string>();
+        static string[] _assetKeys = [];
 
         static bool isID(string key)
         {
@@ -28,6 +28,11 @@ namespace AddressableDumper
         static bool isValidAsset(string key)
         {
             return Addressables.LoadAssetAsync<object>(key).WaitForCompletion() is UnityEngine.Object unityObject && unityObject;
+        }
+
+        static bool isValidAsset(AssetInfo assetInfo)
+        {
+            return assetInfo.Asset is UnityEngine.Object unityObject && unityObject;
         }
 
         public static IEnumerable<AssetInfo> LoadAllAssets()
@@ -68,33 +73,28 @@ namespace AddressableDumper
                 refresh = true;
             }
 
+            string addressablesKeysDumpPath = System.IO.Path.Combine(Main.PersistentSaveDataDirectory, "dump.txt");
+            if (!File.Exists(addressablesKeysDumpPath))
+            {
+                refresh = true;
+            }
+
             if (refresh)
             {
                 Log.Info("Refreshing keys cache...");
 
-                _assetKeys = Addressables.ResourceLocators.SelectMany(locator => locator.Keys).Select(key => key?.ToString()).Where(key =>
+                AssetInfo[] assets = Addressables.ResourceLocators.SelectMany(locator => locator.Keys).Select(key => key?.ToString()).Where(key =>
                 {
-                    if (string.IsNullOrEmpty(key))
-                    {
-#if DEBUG
-                        Log.Debug("Skipping key: null");
-#endif
+                    if (string.IsNullOrWhiteSpace(key))
                         return false;
-                    }
 
                     if (int.TryParse(key, out _))
                     {
-#if DEBUG
-                        Log.Debug($"Skipping key {key}: number");
-#endif
                         return false;
                     }
 
                     if (isID(key))
                     {
-#if DEBUG
-                        Log.Debug($"Skipping key {key}: id");
-#endif
                         return false;
                     }
 
@@ -130,22 +130,28 @@ namespace AddressableDumper
                             return false;
                     }
 
-                    if (!isValidAsset(key))
+                    return true;
+                }).Select(key => new AssetInfo(key)).Where(asset =>
+                {
+                    if (!isValidAsset(asset))
                     {
 #if DEBUG
-                        Log.Debug($"Skipping key {key}: invalid asset");
+                        Log.Debug($"Skipping {asset}: invalid asset");
 #endif
                         return false;
                     }
 
 #if DEBUG
-                    Log.Debug($"Found valid key: {key}");
+                    Log.Debug($"Found valid key: {asset}");
 #endif
 
                     return true;
-                }).Distinct().OrderBy(s => s).ToArray();
+                }).OrderBy(s => s.Key).ToArray();
+
+                _assetKeys = Array.ConvertAll(assets, a => a.Key);
 
                 File.WriteAllLines(addressableKeysCachePath, _assetKeys);
+                File.WriteAllLines(addressablesKeysDumpPath, assets.Select(a => $"{a.Key}\t\t({a.AssetType?.FullName ?? "null"})"));
                 File.WriteAllText(addressablesCacheVersionPath, currentVersion);
             }
             else
