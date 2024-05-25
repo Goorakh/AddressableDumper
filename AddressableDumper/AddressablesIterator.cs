@@ -73,7 +73,7 @@ namespace AddressableDumper
                 refresh = true;
             }
 
-            string addressablesKeysDumpPath = System.IO.Path.Combine(Main.PersistentSaveDataDirectory, "dump.txt");
+            string addressablesKeysDumpPath = System.IO.Path.Combine(Main.PersistentSaveDataDirectory, "keys_dump.txt");
             if (!File.Exists(addressablesKeysDumpPath))
             {
                 refresh = true;
@@ -142,7 +142,7 @@ namespace AddressableDumper
                     }
 
 #if DEBUG
-                    Log.Debug($"Found valid key: {asset}");
+                    Log.Debug($"Found valid key: {asset.Key}");
 #endif
 
                     return true;
