@@ -452,15 +452,52 @@ namespace AddressableDumper
 
                 if (asset.TryGetComponent(out DestroyOnTimer destroyOnTimer))
                 {
-                    if (asset.GetComponent<EffectComponent>())
+                    destroyOnTimer.enabled = false;
+                }
+
+                if (asset.TryGetComponent(out EffectComponent effectComponent))
+                {
+                    bool tryEstimateEffectDuration(out float estimatedDuration)
                     {
-                        initialWaitTime = destroyOnTimer.duration * 0.2f;
+                        ParticleSystem[] particleSystems = asset.GetComponentsInChildren<ParticleSystem>();
+                        if (particleSystems.Length > 0)
+                        {
+                            ParticleSystem[] nonLoopingParticleSystems = particleSystems.Where(p => !p.main.loop).ToArray();
+                            if (nonLoopingParticleSystems.Length > 0)
+                            {
+                                estimatedDuration = nonLoopingParticleSystems.Select(p =>
+                                {
+                                    float maxStartDelay = p.main.startDelay.Evaluate(0f, 1f) * p.main.startDelayMultiplier;
+                                    float maxStartLifetime = p.main.startLifetime.Evaluate(0f, 1f) * p.main.startLifetimeMultiplier;
+
+                                    return maxStartDelay + maxStartLifetime;
+                                }).Average();
+
+                                return true;
+                            }
+
+                            // If all particles are looping, it won't really matter when the picture is taken, so just use whatever value would already be used
+                        }
+
+                        if (destroyOnTimer)
+                        {
+                            estimatedDuration = destroyOnTimer.duration;
+                            return true;
+                        }
+
+                        estimatedDuration = float.NaN;
+                        return false;
                     }
-                    else
+
+                    if (tryEstimateEffectDuration(out float estimatedEffectDuration))
                     {
-                        destroyOnTimer.enabled = false;
+                        initialWaitTime = estimatedEffectDuration * 0.4f;
                     }
                 }
+
+#if DEBUG
+                Log.Debug($"Waiting {initialWaitTime} seconds for model to settle");
+#endif
 
                 yield return new WaitForSeconds(initialWaitTime);
             }
