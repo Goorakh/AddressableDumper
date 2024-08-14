@@ -5,12 +5,14 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.AddressableAssets.ResourceLocators;
+using UnityEngine.ResourceManagement.ResourceLocations;
 
 namespace AddressableDumper
 {
     public static class AddressablesIterator
     {
-        static string[] _assetKeys = [];
+        static IResourceLocation[] _assetLocations = [];
 
         static bool isID(string key)
         {
@@ -35,16 +37,25 @@ namespace AddressableDumper
             return assetInfo.Asset is UnityEngine.Object unityObject && unityObject;
         }
 
-        public static IEnumerable<AssetInfo> LoadAllAssets()
+        static bool isValidAsset(Type assetType)
         {
-            for (int i = 0; i < _assetKeys.Length; i++)
+            return typeof(UnityEngine.Object).IsAssignableFrom(assetType);
+        }
+
+        public static AssetInfo[] LoadAllAssets()
+        {
+            AssetInfo[] assetInfos = new AssetInfo[_assetLocations.Length];
+
+            for (int i = 0; i < _assetLocations.Length; i++)
             {
-                string key = _assetKeys[i];
+                IResourceLocation location = _assetLocations[i];
 
-                Log.Info($"Loading asset {i + 1}/{_assetKeys.Length}: {key}");
+                Log.Info($"Loading asset {i + 1}/{_assetLocations.Length}: {location.PrimaryKey}");
 
-                yield return new AssetInfo(key);
+                assetInfos[i] = new AssetInfo(location);
             }
+
+            return assetInfos;
         }
 
         [SystemInitializer]
@@ -83,80 +94,79 @@ namespace AddressableDumper
             {
                 Log.Info("Refreshing keys cache...");
 
-                AssetInfo[] assets = Addressables.ResourceLocators.SelectMany(locator => locator.Keys).Select(key => key?.ToString()).Where(key =>
+                AssetInfo[] assets = Addressables.ResourceLocators.SelectMany(locator =>
                 {
-                    if (string.IsNullOrWhiteSpace(key))
-                        return false;
+                    Log.Info($"Collecting keys from resource locator: {locator.LocatorId}");
 
-                    if (int.TryParse(key, out _))
+                    if (locator is ResourceLocationMap resourceLocationMap)
                     {
-                        return false;
+                        HashSet<IResourceLocation> resourceLocations = [];
+
+                        foreach (IList<IResourceLocation> locations in resourceLocationMap.Locations.Values)
+                        {
+                            foreach (IResourceLocation location in locations)
+                            {
+                                if (location.ProviderId == "UnityEngine.ResourceManagement.ResourceProviders.LegacyResourcesProvider")
+                                {
+                                    Log.Debug($"Skipping invalid asset provider {location.ProviderId} ({location.PrimaryKey})");
+                                    continue;
+                                }
+
+                                if (!isValidAsset(location.ResourceType))
+                                {
+                                    Log.Debug($"Skipping invalid asset type {location.ResourceType.Name} ({location.PrimaryKey})");
+                                    continue;
+                                }
+
+                                resourceLocations.Add(location);
+                            }
+                        }
+
+                        return resourceLocations;
                     }
 
-                    if (isID(key))
-                    {
-                        return false;
-                    }
+                    return [];
+                }).Select(l => new AssetInfo(l)).OrderBy(a => a.Key).ToArray();
 
-                    // These assets cause the game to freeze indefinitely when trying to load them, so just manually exclude them all
-                    switch (key)
-                    {
-                        case "Advanced_Pressed_mini":
-                        case "Advanced_UnPressed_mini":
-                        case "Button_Off":
-                        case "Button_On":
-                        case "DebugUI Canvas":
-                        case "DebugUI Persistent Canvas":
-                        case "Icon":
-                        case "Materials/Collider":
-                        case "Materials/EdgePicker":
-                        case "Materials/EdgePickerHDRP":
-                        case "Materials/FacePicker":
-                        case "Materials/FacePickerHDRP":
-                        case "Materials/InvisibleFace":
-                        case "Materials/NoDraw":
-                        case "Materials/ProBuilderDefault":
-                        case "Materials/StandardVertexColorHDRP":
-                        case "Materials/StandardVertexColorLWRP":
-                        case "Materials/Trigger":
-                        case "Materials/UnlitVertexColor":
-                        case "Materials/VertexPicker":
-                        case "Materials/VertexPickerHDRP":
-                        case "Missing Object":
-                        case "Textures/GridBox_Default":
-#if DEBUG
-                            Log.Debug($"Skipping key {key}: blacklist");
-#endif
-                            return false;
-                    }
+                Log.Info($"Found {assets.Length} locations");
 
-                    return true;
-                }).Select(key => new AssetInfo(key)).Where(asset =>
-                {
-                    if (!isValidAsset(asset))
-                    {
-#if DEBUG
-                        Log.Debug($"Skipping {asset}: invalid asset");
-#endif
-                        return false;
-                    }
+                _assetLocations = Array.ConvertAll(assets, a => a.Location);
 
-#if DEBUG
-                    Log.Debug($"Found valid key: {asset.Key}");
-#endif
+                File.WriteAllLines(addressableKeysCachePath, _assetLocations.Select(l => l.PrimaryKey + "|" + l.ResourceType.AssemblyQualifiedName));
 
-                    return true;
-                }).OrderBy(s => s.Key).ToArray();
-
-                _assetKeys = Array.ConvertAll(assets, a => a.Key);
-
-                File.WriteAllLines(addressableKeysCachePath, _assetKeys);
                 File.WriteAllLines(addressablesKeysDumpPath, assets.Select(a => $"{a.Key}\t\t({a.AssetType?.FullName ?? "null"})"));
                 File.WriteAllText(addressablesCacheVersionPath, currentVersion);
             }
             else
             {
-                _assetKeys = File.ReadAllLines(addressableKeysCachePath);
+                HashSet<IResourceLocation> resourceLocations = [];
+
+                foreach (string serializedLocation in File.ReadAllLines(addressableKeysCachePath))
+                {
+                    string[] split = serializedLocation.Split('|');
+
+                    string key = split[0];
+                    string typeName = split[1];
+
+                    Type assetType = Type.GetType(typeName, false);
+                    if (assetType == null)
+                    {
+                        Log.Error($"Could not resolve type {typeName}");
+                        continue;
+                    }
+
+                    foreach (IResourceLocator resourceLocator in Addressables.ResourceLocators)
+                    {
+                        if (resourceLocator.Locate(key, assetType, out IList<IResourceLocation> locations))
+                        {
+                            resourceLocations.UnionWith(locations);
+                        }
+                    }
+                }
+
+                Log.Info($"Loaded {resourceLocations.Count} locations from cache");
+
+                _assetLocations = resourceLocations.ToArray();
             }
         }
     }
