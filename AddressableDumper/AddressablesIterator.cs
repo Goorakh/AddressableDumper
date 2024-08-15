@@ -108,13 +108,17 @@ namespace AddressableDumper
                             {
                                 if (location.ProviderId == "UnityEngine.ResourceManagement.ResourceProviders.LegacyResourcesProvider")
                                 {
+#if DEBUG
                                     Log.Debug($"Skipping invalid asset provider {location.ProviderId} ({location.PrimaryKey})");
+#endif
                                     continue;
                                 }
 
                                 if (!isValidAsset(location.ResourceType))
                                 {
+#if DEBUG
                                     Log.Debug($"Skipping invalid asset type {location.ResourceType.Name} ({location.PrimaryKey})");
+#endif
                                     continue;
                                 }
 
