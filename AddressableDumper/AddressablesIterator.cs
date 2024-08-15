@@ -19,7 +19,7 @@ namespace AddressableDumper
             return typeof(UnityEngine.Object).IsAssignableFrom(assetType);
         }
 
-        public static AssetInfo[] LoadAllAssets()
+        public static AssetInfo[] GetAllAssets()
         {
             AssetInfo[] assetInfos = new AssetInfo[_assetLocations.Length];
 
@@ -27,7 +27,7 @@ namespace AddressableDumper
             {
                 IResourceLocation location = _assetLocations[i];
 
-                Log.Info($"Loading asset {i + 1}/{_assetLocations.Length}: {location.PrimaryKey}");
+                Log.Info($"Retrieving asset info {i + 1}/{_assetLocations.Length}: {location.PrimaryKey}");
 
                 assetInfos[i] = new AssetInfo(location);
             }

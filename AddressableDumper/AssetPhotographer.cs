@@ -84,7 +84,7 @@ namespace AddressableDumper
 
             yield return new WaitForEndOfFrame();
 
-            foreach (IGrouping<string, AssetPathInfo> assetsByPath in from asset in AddressablesIterator.LoadAllAssets()
+            foreach (IGrouping<string, AssetPathInfo> assetsByPath in from asset in AddressablesIterator.GetAllAssets()
                                                                       select new AssetPathInfo(asset) into assetPath
                                                                       group assetPath by assetPath.Directory)
             {
