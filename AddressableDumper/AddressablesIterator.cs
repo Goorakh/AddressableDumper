@@ -14,29 +14,6 @@ namespace AddressableDumper
     {
         static IResourceLocation[] _assetLocations = [];
 
-        static bool isID(string key)
-        {
-            foreach (char c in key)
-            {
-                if (!char.IsDigit(c) && !(char.IsLower(c) && c >= 'a' && c <= 'f'))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        static bool isValidAsset(string key)
-        {
-            return Addressables.LoadAssetAsync<object>(key).WaitForCompletion() is UnityEngine.Object unityObject && unityObject;
-        }
-
-        static bool isValidAsset(AssetInfo assetInfo)
-        {
-            return assetInfo.Asset is UnityEngine.Object unityObject && unityObject;
-        }
-
         static bool isValidAsset(Type assetType)
         {
             return typeof(UnityEngine.Object).IsAssignableFrom(assetType);
