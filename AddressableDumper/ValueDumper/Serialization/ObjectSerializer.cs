@@ -596,36 +596,61 @@ namespace AddressableDumper.ValueDumper.Serialization
                     sb.Append(")");
                 }
 
-                void addObjectRefPath(StringBuilder sb, IEnumerable<Transform> childOrder)
+                void addObjectRefPath(StringBuilder sb, IEnumerable<Transform> childOrder, bool appendRootName)
                 {
                     sb.Append("objref('");
 
+                    bool appendedAnyObjectPath = false;
                     int currentChildIndex = 0;
-                    List<int> childIndices = [];
+
+                    void appendPath(string name)
+                    {
+                        if (appendedAnyObjectPath)
+                            sb.Append('/');
+
+                        sb.Append(name);
+                        appendedAnyObjectPath = true;
+                    }
+
+                    if (appendRootName)
+                    {
+                        appendPath("$root");
+                    }
+
+                    List<string> childIndexNames = [];
 
                     if (childOrder is ICollection collection)
                     {
-                        childIndices.Capacity = collection.Count;
+                        childIndexNames.Capacity = collection.Count;
                     }
 
                     foreach (Transform child in childOrder)
                     {
-                        if (currentChildIndex > 0)
-                            sb.Append('/');
+                        appendPath(child.name);
 
-                        sb.Append(child.name);
-
-                        if (!tryGetChildIndex(child, out int childIndex))
+                        string childIndexName;
+                        if (tryGetChildIndex(child, out int childIndex))
+                        {
+                            childIndexName = childIndex.ToString();
+                        }
+                        else if (currentChildIndex == 0 && child.parent == null)
+                        {
+                            childIndexName = "$root";
+                        }
+                        else
+                        {
                             throw new Exception($"Failed to find child index for '{child}' ({currentChildIndex})");
+                        }
 
-                        childIndices.Add(childIndex);
+                        childIndexNames.Add(childIndexName);
 
+                        appendedAnyObjectPath = true;
                         currentChildIndex++;
                     }
 
                     sb.Append("'");
 
-                    sb.Append($", child_idxs=[{string.Join(", ", childIndices)}]");
+                    sb.Append($", child_idxs=[{string.Join(", ", childIndexNames)}]");
 
                     sb.Append(")");
                 }
@@ -657,7 +682,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                             if (childPathStack.Count > 0)
                             {
                                 stringBuilder.Append('.');
-                                addObjectRefPath(stringBuilder, childPathStack);
+                                addObjectRefPath(stringBuilder, childPathStack, false);
                             }
 
                             foundAsset = true;
@@ -716,14 +741,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                         childPathStack.Push(current);
                     }
 
-                    if (childPathStack.Count > 0)
-                    {
-                        childPathStack.Push(root);
-                    }
-
                     StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
 
-                    addObjectRefPath(stringBuilder, childPathStack);
+                    addObjectRefPath(stringBuilder, childPathStack, true);
 
                     stringBuilder.Append('.');
 
