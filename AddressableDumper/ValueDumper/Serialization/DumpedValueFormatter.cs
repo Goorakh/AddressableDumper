@@ -83,6 +83,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                     layerNameBuilder = HG.StringBuilderPool.ReturnStringBuilder(layerNameBuilder);
 
                     return $"[{layerNames}] ({mask})";
+                case PropertyName propertyName:
+                    return propertyName.ToString();
                 default:
                     throw new NotImplementedException($"Unhandled argument type '{arg.GetType().Name}'");
             }

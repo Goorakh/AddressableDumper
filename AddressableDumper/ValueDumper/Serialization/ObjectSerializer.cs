@@ -470,6 +470,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case SkeletonBone:
                 case LightBakingOutput:
                 case JointSpring:
+                case TreeInstance:
+                case ClothSkinningCoefficient:
                 {
                     builder.AddStartObject();
 
@@ -522,6 +524,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case AnimationState:
                 case AnimatorStateInfo:
                 case AnimatorClipInfo:
+                case TreePrototype:
+                case DetailPrototype:
                 {
                     builder.AddStartObject();
 
@@ -661,6 +665,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 }
                 case HumanDescription:
                 case HumanBone:
+                case CharacterInfo:
                 {
                     builder.AddStartObject();
 
