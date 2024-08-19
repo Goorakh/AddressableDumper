@@ -1,8 +1,10 @@
-﻿using RoR2;
+﻿using AddressableDumper.ValueDumper;
+using RoR2;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.AddressableAssets.ResourceLocators;
@@ -12,7 +14,10 @@ namespace AddressableDumper
 {
     public static class AddressablesIterator
     {
-        static IResourceLocation[] _assetLocations = [];
+        static AssetInfo[] _allAssetInfos = [];
+
+        static IReadOnlyDictionary<UnityEngine.Object, AssetInfo> _assetInfoLookup;
+        public static IReadOnlyDictionary<UnityEngine.Object, AssetInfo> AssetInfoLookup => _assetInfoLookup ??= new AssetLookup(GetAllAssets());
 
         static bool isValidAsset(Type assetType)
         {
@@ -21,18 +26,7 @@ namespace AddressableDumper
 
         public static AssetInfo[] GetAllAssets()
         {
-            AssetInfo[] assetInfos = new AssetInfo[_assetLocations.Length];
-
-            for (int i = 0; i < _assetLocations.Length; i++)
-            {
-                IResourceLocation location = _assetLocations[i];
-
-                Log.Info($"Retrieving asset info {i + 1}/{_assetLocations.Length}: {location.PrimaryKey}");
-
-                assetInfos[i] = new AssetInfo(location);
-            }
-
-            return assetInfos;
+            return _allAssetInfos;
         }
 
         [SystemInitializer]
@@ -71,7 +65,7 @@ namespace AddressableDumper
             {
                 Log.Info("Refreshing keys cache...");
 
-                AssetInfo[] assets = Addressables.ResourceLocators.SelectMany(locator =>
+                _allAssetInfos = Addressables.ResourceLocators.SelectMany(locator =>
                 {
                     Log.Info($"Collecting keys from resource locator: {locator.LocatorId}");
 
@@ -109,45 +103,66 @@ namespace AddressableDumper
                     return [];
                 }).Select(l => new AssetInfo(l)).OrderBy(a => a.Key).ToArray();
 
-                Log.Info($"Found {assets.Length} locations");
+                Log.Info($"Found {_allAssetInfos.Length} locations");
 
-                _assetLocations = Array.ConvertAll(assets, a => a.Location);
-
-                File.WriteAllLines(addressableKeysCachePath, _assetLocations.Select(l => l.PrimaryKey + "|" + l.ResourceType.AssemblyQualifiedName));
-
-                File.WriteAllLines(addressablesKeysDumpPath, assets.Select(a => $"{a.Key}\t\t({a.AssetType?.FullName ?? "null"})"));
-                File.WriteAllText(addressablesCacheVersionPath, currentVersion);
-            }
-            else
-            {
-                HashSet<IResourceLocation> resourceLocations = [];
-
-                foreach (string serializedLocation in File.ReadAllLines(addressableKeysCachePath))
+                using (FileStream keysCacheFile = File.Open(addressableKeysCachePath, FileMode.Create, FileAccess.Write))
                 {
-                    string[] split = serializedLocation.Split('|');
-
-                    string key = split[0];
-                    string typeName = split[1];
-
-                    Type assetType = Type.GetType(typeName, false);
-                    if (assetType == null)
+                    using (BinaryWriter writer = new BinaryWriter(keysCacheFile, Encoding.UTF8, true))
                     {
-                        Log.Error($"Could not resolve type {typeName}");
-                        continue;
-                    }
-
-                    foreach (IResourceLocator resourceLocator in Addressables.ResourceLocators)
-                    {
-                        if (resourceLocator.Locate(key, assetType, out IList<IResourceLocation> locations))
+                        foreach (AssetInfo assetInfo in _allAssetInfos)
                         {
-                            resourceLocations.UnionWith(locations);
+                            writer.Write(assetInfo.Key);
+                            writer.Write(assetInfo.AssetType.AssemblyQualifiedName);
+                            writer.Write(assetInfo.ObjectName ?? string.Empty);
                         }
                     }
                 }
 
-                Log.Info($"Loaded {resourceLocations.Count} locations from cache");
+                File.WriteAllLines(addressablesKeysDumpPath, _allAssetInfos.Select(a => $"{a.Key}\t\t({a.AssetType?.FullName ?? "null"})"));
+                File.WriteAllText(addressablesCacheVersionPath, currentVersion);
+            }
+            else
+            {
+                List<AssetInfo> loadedAssetInfos = [];
 
-                _assetLocations = resourceLocations.ToArray();
+                using (FileStream keysCacheFile = File.Open(addressableKeysCachePath, FileMode.Open, FileAccess.Read))
+                {
+                    using (BinaryReader reader = new BinaryReader(keysCacheFile, Encoding.UTF8, true))
+                    {
+                        HashSet<IResourceLocation> resourceLocations = [];
+
+                        while (keysCacheFile.Position < keysCacheFile.Length)
+                        {
+                            string key = reader.ReadString();
+                            string typeName = reader.ReadString();
+                            string objectName = reader.ReadString();
+
+                            Type assetType = Type.GetType(typeName, false);
+                            if (assetType == null)
+                            {
+                                Log.Error($"Could not resolve type {typeName}");
+                                continue;
+                            }
+
+                            foreach (IResourceLocator resourceLocator in Addressables.ResourceLocators)
+                            {
+                                if (resourceLocator.Locate(key, assetType, out IList<IResourceLocation> locations))
+                                {
+                                    foreach (IResourceLocation location in locations)
+                                    {
+                                        if (resourceLocations.Add(location))
+                                        {
+                                            loadedAssetInfos.Add(new AssetInfo(location, objectName));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Log.Info($"Loaded {loadedAssetInfos.Count} locations from cache");
+                _allAssetInfos = loadedAssetInfos.ToArray();
             }
         }
     }
