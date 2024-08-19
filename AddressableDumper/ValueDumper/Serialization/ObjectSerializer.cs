@@ -943,7 +943,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             buildSerializedMemberWriteOperations(value, builder, type =>
             {
-                bool isUnityType = !string.IsNullOrEmpty(type.Namespace) && type.Namespace.StartsWith(nameof(UnityEngine)) && !typeof(MonoBehaviour).IsAssignableFrom(type);
+                bool isUnityType = isUnityScriptType(type);
 
                 return new MemberSerializationContext(isUnityType ? MemberTypes.Property : MemberTypes.Field,
                                                       isUnityType,
@@ -972,7 +972,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             buildSerializedMemberWriteOperations(value, builder, type =>
             {
-                bool isUnityType = !string.IsNullOrEmpty(type.Namespace) && type.Namespace.StartsWith(nameof(UnityEngine)) && !typeof(MonoBehaviour).IsAssignableFrom(type);
+                bool isUnityType = isUnityScriptType(type);
 
                 return new MemberSerializationContext(isUnityType ? MemberTypes.Property : MemberTypes.Field,
                                                       isUnityType,
@@ -983,6 +983,14 @@ namespace AddressableDumper.ValueDumper.Serialization
             builder.AddEndObject();
 
             return true;
+        }
+
+        static bool isUnityScriptType(Type type)
+        {
+            return !string.IsNullOrEmpty(type.Namespace) &&
+                   type.Namespace.StartsWith(nameof(UnityEngine)) &&
+                   !typeof(MonoBehaviour).IsAssignableFrom(type) &&
+                   !typeof(ScriptableObject).IsAssignableFrom(type);
         }
 
         readonly struct MemberSerializationContext
