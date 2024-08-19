@@ -337,6 +337,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case GradientAlphaKey:
                 case SkeletonBone:
                 case LightBakingOutput:
+                case JointSpring:
                 {
                     builder.AddStartObject();
 
@@ -383,6 +384,13 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case HumanLimit:
                 case SoftJointLimitSpring:
                 case SoftJointLimit:
+                case JointDrive:
+                case RenderTextureDescriptor:
+                case WheelFrictionCurve:
+                case AnimationEvent:
+                case AnimationState:
+                case AnimatorStateInfo:
+                case AnimatorClipInfo:
                 {
                     builder.AddStartObject();
 
