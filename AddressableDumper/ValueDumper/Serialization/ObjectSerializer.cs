@@ -8,7 +8,6 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
-using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
 
 namespace AddressableDumper.ValueDumper.Serialization
@@ -428,6 +427,44 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     return true;
                 }
+                case AnimationEvent animationEvent:
+                {
+                    builder.AddStartObject();
+
+                    buildTypeFieldWriteOperation(value.GetType(), builder);
+
+                    buildPropertyWithValueWriteOperation("time", animationEvent.time, builder);
+
+                    buildPropertyWithValueWriteOperation("functionName", animationEvent.functionName, builder);
+
+                    buildPropertyWithValueWriteOperation("stringParameter", animationEvent.stringParameter, builder);
+
+                    buildPropertyWithValueWriteOperation("floatParameter", animationEvent.floatParameter, builder);
+
+                    buildPropertyWithValueWriteOperation("intParameter", animationEvent.intParameter, builder);
+
+                    buildPropertyWithValueWriteOperation("objectReferenceParameter", animationEvent.objectReferenceParameter, builder);
+
+                    buildPropertyWithValueWriteOperation("isFiredByLegacy", animationEvent.isFiredByLegacy, builder);
+
+                    if (animationEvent.isFiredByLegacy)
+                    {
+                        buildPropertyWithValueWriteOperation("animationState", animationEvent.animationState, builder);
+                    }
+
+                    buildPropertyWithValueWriteOperation("isFiredByAnimator", animationEvent.isFiredByAnimator, builder);
+
+                    if (animationEvent.isFiredByAnimator)
+                    {
+                        buildPropertyWithValueWriteOperation("animatorStateInfo", animationEvent.animatorStateInfo, builder);
+
+                        buildPropertyWithValueWriteOperation("animatorClipInfo", animationEvent.animatorClipInfo, builder);
+                    }
+
+                    builder.AddEndObject();
+
+                    return true;
+                }
                 case GradientColorKey:
                 case GradientAlphaKey:
                 case SkeletonBone:
@@ -482,7 +519,6 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case JointDrive:
                 case RenderTextureDescriptor:
                 case WheelFrictionCurve:
-                case AnimationEvent:
                 case AnimationState:
                 case AnimatorStateInfo:
                 case AnimatorClipInfo:
@@ -1119,6 +1155,16 @@ namespace AddressableDumper.ValueDumper.Serialization
                             // Not necessary
                             case nameof(Renderer.worldToLocalMatrix):
                             case nameof(Renderer.localToWorldMatrix):
+                                continue;
+                        }
+                    }
+                    else if (baseType == typeof(Animator))
+                    {
+                        switch (member.Name)
+                        {
+                            // Only valid in OnAnimatorIK or OnStateIK
+                            case nameof(Animator.bodyPosition):
+                            case nameof(Animator.bodyRotation):
                                 continue;
                         }
                     }
