@@ -260,8 +260,8 @@ namespace AddressableDumper.ValueDumper.Serialization
             if (anyFieldWritten || !anyFieldWriteAttempted)
             {
                 serializedObjectBuilder.Flush();
-            return true;
-        }
+                return true;
+            }
             else
             {
                 return false;
@@ -693,12 +693,6 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return foundAsset;
                 }
 
-                if (tryGetAssetRefString(obj, out string assetRefString))
-                {
-                    builder.AddValueRaw(assetRefString);
-                    return true;
-                }
-
                 bool tryGetChildRefString(UnityEngine.Object obj, Transform root, out string childRefString)
                 {
                     GameObject gameObject = obj.GetGameObject();
@@ -750,6 +744,12 @@ namespace AddressableDumper.ValueDumper.Serialization
                         builder.AddValueRaw(childRefString);
                         return true;
                     }
+                }
+
+                if (tryGetAssetRefString(obj, out string assetRefString))
+                {
+                    builder.AddValueRaw(assetRefString);
+                    return true;
                 }
             }
 
