@@ -199,12 +199,21 @@ namespace AddressableDumper.ValueDumper.Serialization
             if (!type.IsSerializable)
                 return false;
 
-            builder.AddStartObject();
+            WriteOperationBuilder serializedObjectBuilder = new WriteOperationBuilder(builder)
+            {
+                AutoFlushCapacity = builder.AutoFlushCapacity,
+                AutoFlush = false,
+            };
 
-            buildTypeFieldWriteOperation(type, builder);
+            serializedObjectBuilder.AddStartObject();
+
+            buildTypeFieldWriteOperation(type, serializedObjectBuilder);
 
             List<Type> hierarchyTypes = ReflectionUtils.GetHierarchyTypes(type);
             hierarchyTypes.Reverse();
+
+            bool anyFieldWritten = false;
+            bool anyFieldWriteAttempted = false;
 
             foreach (Type baseType in hierarchyTypes)
             {
@@ -215,6 +224,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                     if (member is not FieldInfo field)
                         throw new NotImplementedException($"Member type {member.MemberType} ({member}) is not implemented");
 
+                    anyFieldWriteAttempted = true;
+
                     object fieldValue;
                     try
                     {
@@ -224,22 +235,37 @@ namespace AddressableDumper.ValueDumper.Serialization
                     {
                         Log.Error_NoCallerPrefix($"Failed to get field value of {field.DeclaringType.FullName}.{field.Name}: {e}");
 
-                        builder.AddPropertyName(field.Name);
-                        builder.AddNull($"Error retrieving member value: {e.Message}");
+                        serializedObjectBuilder.AddPropertyName(field.Name);
+                        serializedObjectBuilder.AddNull($"Error retrieving member value: {e.Message}");
 
                         continue;
                     }
 
-                    if (!tryBuildPropertyWithValueWriteOperation(field.Name, fieldValue, builder))
+                    if (tryBuildPropertyWithValueWriteOperation(field.Name, fieldValue, serializedObjectBuilder))
+                    {
+                        anyFieldWritten = true;
+
+                        serializedObjectBuilder.AutoFlush = true;
+                        serializedObjectBuilder.Flush();
+                    }
+                    else
                     {
                         Log.Warning($"Failed to determine write operation for serialized field {field.DeclaringType.FullName}.{field.Name}: {fieldValue} ({field.FieldType.Name})");
                     }
                 }
             }
 
-            builder.AddEndObject();
+            serializedObjectBuilder.AddEndObject();
 
+            if (anyFieldWritten || !anyFieldWriteAttempted)
+            {
+                serializedObjectBuilder.Flush();
             return true;
+        }
+            else
+            {
+                return false;
+            }
         }
 
         bool tryBuildPropertyWithValueWriteOperation(string propertyName, object value, WriteOperationBuilder builder)
