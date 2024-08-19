@@ -1,7 +1,6 @@
 ﻿using AddressableDumper.Utils;
 using AddressableDumper.Utils.Extensions;
 using Newtonsoft.Json;
-using RoR2;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,6 +8,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
 
 namespace AddressableDumper.ValueDumper.Serialization
@@ -353,6 +353,75 @@ namespace AddressableDumper.ValueDumper.Serialization
                     for (int i = 0; i < 4; i++)
                     {
                         buildPropertyWithValueWriteOperation($"row{i}", matrix4x4.GetRow(i), builder);
+                    }
+
+                    builder.AddEndObject();
+
+                    return true;
+                }
+                case ParticleSystem.MinMaxCurve minMaxCurve:
+                {
+                    builder.AddStartObject();
+
+                    buildTypeFieldWriteOperation(value.GetType(), builder);
+
+                    buildPropertyWithValueWriteOperation("mode", minMaxCurve.mode, builder);
+
+                    switch (minMaxCurve.mode)
+                    {
+                        case ParticleSystemCurveMode.Constant:
+                            buildPropertyWithValueWriteOperation("constant", minMaxCurve.constantMax, builder);
+                            break;
+                        case ParticleSystemCurveMode.Curve:
+                            buildPropertyWithValueWriteOperation("curveMultiplier", minMaxCurve.curveMultiplier, builder);
+                            buildPropertyWithValueWriteOperation("curve", minMaxCurve.curveMax, builder);
+                            break;
+                        case ParticleSystemCurveMode.TwoCurves:
+                            buildPropertyWithValueWriteOperation("curveMultiplier", minMaxCurve.curveMultiplier, builder);
+                            buildPropertyWithValueWriteOperation("curveMin", minMaxCurve.curveMin, builder);
+                            buildPropertyWithValueWriteOperation("curveMax", minMaxCurve.curveMax, builder);
+                            break;
+                        case ParticleSystemCurveMode.TwoConstants:
+                            buildPropertyWithValueWriteOperation("constantMin", minMaxCurve.constantMin, builder);
+                            buildPropertyWithValueWriteOperation("constantMax", minMaxCurve.constantMax, builder);
+                            break;
+                        default:
+                            break;
+                    }
+
+                    builder.AddEndObject();
+
+                    return true;
+                }
+                case ParticleSystem.MinMaxGradient minMaxGradient:
+                {
+                    builder.AddStartObject();
+
+                    buildTypeFieldWriteOperation(value.GetType(), builder);
+
+                    buildPropertyWithValueWriteOperation("mode", minMaxGradient.mode, builder);
+
+                    switch (minMaxGradient.mode)
+                    {
+                        case ParticleSystemGradientMode.Color:
+                            buildPropertyWithValueWriteOperation("color", minMaxGradient.colorMax, builder);
+                            break;
+                        case ParticleSystemGradientMode.Gradient:
+                            buildPropertyWithValueWriteOperation("gradient", minMaxGradient.gradientMax, builder);
+                            break;
+                        case ParticleSystemGradientMode.TwoColors:
+                            buildPropertyWithValueWriteOperation("colorMin", minMaxGradient.colorMin, builder);
+                            buildPropertyWithValueWriteOperation("colorMax", minMaxGradient.colorMax, builder);
+                            break;
+                        case ParticleSystemGradientMode.TwoGradients:
+                            buildPropertyWithValueWriteOperation("gradientMin", minMaxGradient.gradientMin, builder);
+                            buildPropertyWithValueWriteOperation("gradientMax", minMaxGradient.gradientMax, builder);
+                            break;
+                        case ParticleSystemGradientMode.RandomColor:
+                            buildPropertyWithValueWriteOperation("colorCurve", minMaxGradient.gradientMax, builder);
+                            break;
+                        default:
+                            throw new NotImplementedException($"{minMaxGradient.mode} is not implemented");
                     }
 
                     builder.AddEndObject();
