@@ -1,8 +1,6 @@
 ﻿using AddressableDumper.ValueDumper.Serialization;
 using Newtonsoft.Json;
 using RoR2;
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -24,30 +22,34 @@ namespace AddressableDumper.ValueDumper
 
             foreach (AssetInfo assetInfo in assetInfos)
             {
-                const string FILE_EXTENSION = ".txt";
+                FilePath dumpFilePath = new FilePath(System.IO.Path.Combine(_addressablesDumpPath, assetInfo.Key) + ".txt");
 
-                string filePathWithoutExtension = System.IO.Path.Combine(_addressablesDumpPath, assetInfo.Key);
+                Directory.CreateDirectory(dumpFilePath.DirectoryName);
 
-                string directoryPath = System.IO.Path.GetDirectoryName(filePathWithoutExtension);
-                if (!Directory.Exists(directoryPath))
-                    Directory.CreateDirectory(directoryPath);
-
-                string filePath = filePathWithoutExtension + FILE_EXTENSION;
-                if (File.Exists(filePath))
+                if (dumpFilePath.Exists)
                 {
-                    filePathWithoutExtension = $"{filePathWithoutExtension} ({assetInfo.AssetType.Name})";
-                    filePath = filePathWithoutExtension + FILE_EXTENSION;
+                    dumpFilePath.FileNameWithoutExtension += $" ({assetInfo.AssetType.Name})";
 
-                    if (File.Exists(filePath))
+                    if (dumpFilePath.Exists)
                     {
-                        filePathWithoutExtension = $"{filePathWithoutExtension} ({Guid.NewGuid()})";
-                        filePath = filePathWithoutExtension + FILE_EXTENSION;
+                        FilePath numberedFilePath;
+
+                        int fileNumber = 1;
+                        do
+                        {
+                            numberedFilePath = dumpFilePath;
+                            numberedFilePath.FileNameWithoutExtension += $" ({fileNumber})";
+
+                            fileNumber++;
+                        } while (numberedFilePath.Exists);
+
+                        dumpFilePath = numberedFilePath;
                     }
                 }
 
                 Log.Info($"Dumping asset values of '{assetInfo.Key}'");
 
-                using (FileStream fileStream = File.Open(filePath, FileMode.CreateNew, FileAccess.Write))
+                using (FileStream fileStream = File.Open(dumpFilePath.FullPath, FileMode.CreateNew, FileAccess.Write))
                 {
                     using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
                     {
