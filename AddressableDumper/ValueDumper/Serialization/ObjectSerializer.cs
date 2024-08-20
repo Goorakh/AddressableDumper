@@ -703,7 +703,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                         sb.Append($"component_idx={componentIndex}");
                     }
 
-                    sb.Append(")");
+                    sb.Append(')');
                 }
 
                 void addObjectRefPath(StringBuilder sb, IEnumerable<Transform> childOrder, bool appendRootName)
@@ -758,11 +758,11 @@ namespace AddressableDumper.ValueDumper.Serialization
                         currentChildIndex++;
                     }
 
-                    sb.Append("'");
+                    sb.Append('\'');
 
                     sb.Append($", child_idxs=[{string.Join(", ", childIndexNames)}]");
 
-                    sb.Append(")");
+                    sb.Append(')');
                 }
 
                 bool tryGetAssetRefString(UnityEngine.Object obj, out string assetRefString)
