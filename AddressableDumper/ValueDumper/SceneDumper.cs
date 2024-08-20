@@ -31,6 +31,10 @@ namespace AddressableDumper.ValueDumper
             _currentScenesDump.Start();
         }
 
+        static void RoachControllerPreventSpawn(On.RoR2.RoachController.orig_Awake orig, RoachController self)
+        {
+        }
+
         class ScenesDumperOperation : IDisposable
         {
             IEnumerator<SceneInfo> _sceneInfoIterator;
@@ -38,6 +42,8 @@ namespace AddressableDumper.ValueDumper
             public void Dispose()
             {
                 SceneManager.activeSceneChanged -= SceneManager_activeSceneChanged;
+
+                On.RoR2.RoachController.Awake -= RoachControllerPreventSpawn;
 
                 _sceneInfoIterator?.Dispose();
                 _sceneInfoIterator = null;
@@ -51,6 +57,8 @@ namespace AddressableDumper.ValueDumper
                 }
 
                 SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
+
+                On.RoR2.RoachController.Awake += RoachControllerPreventSpawn;
 
                 _sceneInfoIterator = AddressablesIterator.GetSceneResourceLocations()
                                                          .Select(location => new SceneInfo(location))
@@ -145,7 +153,8 @@ namespace AddressableDumper.ValueDumper
                 string rootObjectsDirectory = System.IO.Path.Combine(_sceneDumpDirectory, "RootObjects");
                 Directory.CreateDirectory(rootObjectsDirectory);
 
-                GameObject[] rootObjects = sceneInstance.GetRootGameObjects();
+                List<GameObject> rootObjects = new List<GameObject>(sceneInstance.rootCount);
+                sceneInstance.GetRootGameObjects(rootObjects);
 
                 HashSet<Transform> rootTransformsSet = [];
                 foreach (GameObject rootObject in rootObjects)
@@ -155,7 +164,7 @@ namespace AddressableDumper.ValueDumper
 
                 Transform[] rootTransforms = rootTransformsSet.ToArray();
 
-                for (int i = 0; i < rootObjects.Length; i++)
+                for (int i = 0; i < rootObjects.Count; i++)
                 {
                     GameObject rootObject = rootObjects[i];
                     string fileName = rootObject.name.FilterChars(System.IO.Path.GetInvalidFileNameChars());
