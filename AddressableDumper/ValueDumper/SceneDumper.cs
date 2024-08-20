@@ -1,5 +1,9 @@
 ﻿using AddressableDumper.Utils.Extensions;
 using AddressableDumper.ValueDumper.Serialization;
+using HarmonyLib;
+using Mono.Cecil.Cil;
+using MonoMod.Cil;
+using MonoMod.RuntimeDetour;
 using Newtonsoft.Json;
 using RoR2;
 using RoR2.Networking;
@@ -35,15 +39,26 @@ namespace AddressableDumper.ValueDumper
         {
         }
 
+        static void preventSceneLoad(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            c.Emit(OpCodes.Ret);
+        }
+
         class ScenesDumperOperation : IDisposable
         {
             IEnumerator<SceneInfo> _sceneInfoIterator;
+
+            ILHook _changeSceneHook;
 
             public void Dispose()
             {
                 SceneManager.activeSceneChanged -= SceneManager_activeSceneChanged;
 
                 On.RoR2.RoachController.Awake -= RoachControllerPreventSpawn;
+                _changeSceneHook?.Dispose();
+                _changeSceneHook = null;
 
                 _sceneInfoIterator?.Dispose();
                 _sceneInfoIterator = null;
@@ -59,6 +74,7 @@ namespace AddressableDumper.ValueDumper
                 SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
 
                 On.RoR2.RoachController.Awake += RoachControllerPreventSpawn;
+                _changeSceneHook = new ILHook(SymbolExtensions.GetMethodInfo<NetworkManager>(_ => _.ServerChangeScene(default)), preventSceneLoad);
 
                 _sceneInfoIterator = AddressablesIterator.GetSceneResourceLocations()
                                                          .Select(location => new SceneInfo(location))
