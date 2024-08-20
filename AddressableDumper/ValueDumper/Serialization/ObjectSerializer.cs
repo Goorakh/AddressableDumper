@@ -14,14 +14,37 @@ namespace AddressableDumper.ValueDumper.Serialization
 {
     public class ObjectSerializer
     {
+        readonly struct SerializingObjectStep
+        {
+            public readonly object Value;
+
+            public readonly UnityEngine.Object AsUnityObject;
+
+            public readonly Transform RootTransform;
+
+            public SerializingObjectStep(object value)
+            {
+                Value = value;
+
+                if (Value is UnityEngine.Object unityObject)
+                {
+                    AsUnityObject = unityObject;
+
+                    GameObject gameObject = AsUnityObject.GetGameObject();
+                    if (gameObject)
+                    {
+                        RootTransform = gameObject.transform.root;
+                    }
+                }
+            }
+        }
+
         static readonly IFormatProvider _formatProvider = new DumpedValueFormatter();
 
         readonly JsonWriter _writer;
         readonly object _rootValue;
 
-        readonly Stack<object> _serializingObjectStack = [];
-
-        readonly Stack<Transform> _serializingObjectRoots = [];
+        readonly Stack<SerializingObjectStep> _serializingObjectStack = [];
 
         bool isSerializingRootValue => _serializingObjectStack.Count <= 1;
 
@@ -72,10 +95,13 @@ namespace AddressableDumper.ValueDumper.Serialization
         bool buildWriteOperation(object value, WriteOperationBuilder builder)
         {
             // TODO: This does not detect recursive references in value types
-            if (_serializingObjectStack.Contains(value, EqualityComparer<object>.Default))
+            foreach (SerializingObjectStep step in _serializingObjectStack)
             {
-                builder.AddNull($"Recursive reference ({value})");
-                return true;
+                if (ReferenceEquals(step.Value, value))
+                {
+                    builder.AddNull($"Recursive reference ({value})");
+                    return true;
+                }
             }
 
             // Don't serialize references to the current scene
@@ -84,33 +110,13 @@ namespace AddressableDumper.ValueDumper.Serialization
                 return false;
             }
 
-            _serializingObjectStack.Push(value);
-
-            bool addedRoot = false;
-            if (value is UnityEngine.Object unityObj)
-            {
-                GameObject gameObject = unityObj.GetGameObject();
-                if (gameObject)
-                {
-                    Transform root = gameObject.transform.root;
-                    if (!_serializingObjectRoots.Contains(root))
-                    {
-                        _serializingObjectRoots.Push(root);
-                        addedRoot = true;
-                    }
-                }
-            }
+            _serializingObjectStack.Push(new SerializingObjectStep(value));
 
             bool anythingWritten = buildWrite(value, builder);
 
-            if (_serializingObjectStack.Count == 0 || !ReferenceEquals(_serializingObjectStack.Peek(), value))
+            if (_serializingObjectStack.Count == 0 || !ReferenceEquals(_serializingObjectStack.Peek().Value, value))
             {
                 throw new Exception($"Invalid state, expected {value} at top of stack, found {(_serializingObjectStack.Count == 0 ? "nothing" : _serializingObjectStack.Peek())}");
-            }
-
-            if (addedRoot)
-            {
-                _serializingObjectRoots.Pop();
             }
 
             _serializingObjectStack.Pop();
@@ -875,13 +881,23 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return true;
                 }
 
-                Transform[] serializingObjectRoots = _serializingObjectRoots.ToArray();
-                for (int i = serializingObjectRoots.Length - 1; i >= 0; i--)
+                SerializingObjectStep[] serializingSteps = _serializingObjectStack.ToArray();
+                // Skip currently serializing object (obj) at index 0
+                for (int i = serializingSteps.Length - 1; i > 0; i--)
                 {
-                    if (tryGetChildRefString(obj, serializingObjectRoots[i], out string childRefString))
+                    SerializingObjectStep step = serializingSteps[i];
+
+                    if (ReferenceEquals(step.Value, obj))
+                        continue;
+
+                    Transform rootTransform = step.RootTransform;
+                    if (rootTransform)
                     {
-                        builder.AddValueRaw(childRefString);
-                        return true;
+                        if (tryGetChildRefString(obj, rootTransform, out string childRefString))
+                        {
+                            builder.AddValueRaw(childRefString);
+                            return true;
+                        }
                     }
                 }
 
