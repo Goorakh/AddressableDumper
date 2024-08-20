@@ -1,4 +1,5 @@
-﻿using AddressableDumper.ValueDumper.Serialization;
+﻿using AddressableDumper.Utils.Extensions;
+using AddressableDumper.ValueDumper.Serialization;
 using Newtonsoft.Json;
 using RoR2;
 using RoR2.Networking;
@@ -108,7 +109,7 @@ namespace AddressableDumper.ValueDumper
 
                 // Split each root object into its own dump file to keep filesizes down
 
-                FilePath sceneInfoFilePath = System.IO.Path.Combine(_sceneDumpDirectory, "SceneInfo.txt");
+                FilePath sceneInfoFilePath = System.IO.Path.Combine(_sceneDumpDirectory, "scene.txt");
                 using (FileStream sceneInfoFile = File.Open(sceneInfoFilePath, FileMode.CreateNew, FileAccess.Write))
                 {
                     using (StreamWriter fileWriter = new StreamWriter(sceneInfoFile, Encoding.UTF8, 1024, true))
@@ -142,16 +143,25 @@ namespace AddressableDumper.ValueDumper
                 }
 
                 string rootObjectsDirectory = System.IO.Path.Combine(_sceneDumpDirectory, "RootObjects");
+                Directory.CreateDirectory(rootObjectsDirectory);
 
-                foreach (GameObject rootObject in sceneInstance.GetRootGameObjects())
+                GameObject[] rootObjects = sceneInstance.GetRootGameObjects();
+                for (int i = 0; i < rootObjects.Length; i++)
                 {
-                    FilePath objectDumpPath = System.IO.Path.Combine(rootObjectsDirectory, rootObject.name);
+                    GameObject rootObject = rootObjects[i];
+                    string fileName = rootObject.name.FilterChars(System.IO.Path.GetInvalidFileNameChars());
+
+                    FilePath objectDumpPath = System.IO.Path.Combine(rootObjectsDirectory, fileName + ".txt");
                     objectDumpPath.MakeUnique();
 
                     using (FileStream fileStream = File.Open(objectDumpPath, FileMode.CreateNew, FileAccess.Write))
                     {
                         using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
                         {
+                            fileWriter.WriteLine($"// Scene: '{sceneInstance.path}'");
+                            fileWriter.WriteLine($"// Root Object Index: {i}");
+                            fileWriter.WriteLine();
+
                             using JsonTextWriter jsonWriter = new JsonTextWriter(fileWriter)
                             {
                                 Formatting = Formatting.Indented,
