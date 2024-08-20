@@ -1173,6 +1173,24 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 continue;
                         }
                     }
+                    else if (baseType == typeof(Camera))
+                    {
+                        switch (member.Name)
+                        {
+                            // Does not make sense for value dump, effectively a random value every dump
+                            case nameof(Camera.previousViewProjectionMatrix):
+                                continue;
+                        }
+                    }
+                    else if (baseType == typeof(Texture))
+                    {
+                        switch (member.Name)
+                        {
+                            // Does not make sense for value dump, effectively a random value every dump
+                            case nameof(Texture.updateCount):
+                                continue;
+                        }
+                    }
 
                     if (serializationContext.ShouldConsiderUnityScriptType)
                     {
