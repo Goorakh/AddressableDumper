@@ -53,5 +53,27 @@ namespace AddressableDumper.ValueDumper
                 FileName = FileNameWithoutExtension + (value ?? string.Empty);
             }
         }
+
+        public void MakeUnique()
+        {
+            string originalFileName = FileNameWithoutExtension;
+
+            int fileNumber = 1;
+            while (Exists)
+            {
+                FileNameWithoutExtension = originalFileName + $" ({fileNumber})";
+                fileNumber++;
+            }
+        }
+
+        public static implicit operator string(FilePath file)
+        {
+            return file.FullPath;
+        }
+
+        public static implicit operator FilePath(string path)
+        {
+            return new FilePath(path);
+        }
     }
 }

@@ -22,34 +22,18 @@ namespace AddressableDumper.ValueDumper
 
             foreach (AssetInfo assetInfo in assetInfos)
             {
-                FilePath dumpFilePath = new FilePath(System.IO.Path.Combine(_addressablesDumpPath, assetInfo.Key) + ".txt");
+                FilePath dumpFilePath = System.IO.Path.Combine(_addressablesDumpPath, assetInfo.Key) + ".txt";
 
                 Directory.CreateDirectory(dumpFilePath.DirectoryName);
 
                 if (dumpFilePath.Exists)
-                {
                     dumpFilePath.FileNameWithoutExtension += $" ({assetInfo.AssetType.Name})";
 
-                    if (dumpFilePath.Exists)
-                    {
-                        FilePath numberedFilePath;
-
-                        int fileNumber = 1;
-                        do
-                        {
-                            numberedFilePath = dumpFilePath;
-                            numberedFilePath.FileNameWithoutExtension += $" ({fileNumber})";
-
-                            fileNumber++;
-                        } while (numberedFilePath.Exists);
-
-                        dumpFilePath = numberedFilePath;
-                    }
-                }
+                dumpFilePath.MakeUnique();
 
                 Log.Info($"Dumping asset values of '{assetInfo.Key}'");
 
-                using (FileStream fileStream = File.Open(dumpFilePath.FullPath, FileMode.CreateNew, FileAccess.Write))
+                using (FileStream fileStream = File.Open(dumpFilePath, FileMode.CreateNew, FileAccess.Write))
                 {
                     using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
                     {

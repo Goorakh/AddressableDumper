@@ -25,6 +25,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         bool isSerializingRootValue => _serializingObjectStack.Count <= 1;
 
+        public Scene? SerializingScene { get; set; }
+
         public ObjectSerializer(JsonWriter writer, object value)
         {
             _writer = writer;
@@ -74,6 +76,12 @@ namespace AddressableDumper.ValueDumper.Serialization
             {
                 builder.AddNull($"Recursive reference ({value})");
                 return true;
+            }
+
+            // Don't serialize references to the current scene
+            if (SerializingScene.HasValue && value is Scene scene && SerializingScene == scene)
+            {
+                return false;
             }
 
             _serializingObjectStack.Push(value);
@@ -706,7 +714,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                     sb.Append(')');
                 }
 
-                void addObjectRefPath(StringBuilder sb, IEnumerable<Transform> childOrder, bool appendRootName)
+                void addObjectRefPath(StringBuilder sb, IEnumerable<Transform> childOrder, string rootName)
                 {
                     sb.Append("objref('");
 
@@ -722,16 +730,17 @@ namespace AddressableDumper.ValueDumper.Serialization
                         appendedAnyObjectPath = true;
                     }
 
-                    if (appendRootName)
-                    {
-                        appendPath("$root");
-                    }
-
                     List<string> childIndexNames = [];
 
                     if (childOrder is ICollection collection)
                     {
                         childIndexNames.Capacity = collection.Count;
+                    }
+
+                    if (!string.IsNullOrEmpty(rootName))
+                    {
+                        appendPath(rootName);
+                        childIndexNames.Add("$root");
                     }
 
                     foreach (Transform child in childOrder)
@@ -792,7 +801,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                             if (childPathStack.Count > 0)
                             {
                                 stringBuilder.Append('.');
-                                addObjectRefPath(stringBuilder, childPathStack, false);
+                                addObjectRefPath(stringBuilder, childPathStack, null);
                             }
 
                             foundAsset = true;
@@ -853,7 +862,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
 
-                    addObjectRefPath(stringBuilder, childPathStack, true);
+                    addObjectRefPath(stringBuilder, childPathStack, root.name);
 
                     stringBuilder.Append('.');
 
@@ -926,7 +935,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             if (isRootObject)
             {
-                buildPropertyWithValueWriteOperation("scene", gameObject.scene, builder);
+                tryBuildPropertyWithValueWriteOperation("scene", gameObject.scene, builder);
 
                 buildPropertyWithValueWriteOperation("sceneCullingMask", gameObject.sceneCullingMask, builder);
             }
@@ -1188,6 +1197,16 @@ namespace AddressableDumper.ValueDumper.Serialization
                         {
                             // Does not make sense for value dump, effectively a random value every dump
                             case nameof(Texture.updateCount):
+                                continue;
+                        }
+                    }
+                    else if (baseType == typeof(Canvas))
+                    {
+                        switch (member.Name)
+                        {
+                            // FIXME: Should ideally not be excluded like this, but causes crashes sometimes (even with the crash fix patch)
+                            //        Doesn't feel *super* important of a value, so for now just exclude it.
+                            case nameof(Canvas.renderingDisplaySize):
                                 continue;
                         }
                     }
