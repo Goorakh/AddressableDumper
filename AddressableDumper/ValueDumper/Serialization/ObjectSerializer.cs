@@ -1,6 +1,7 @@
 ﻿using AddressableDumper.Utils;
 using AddressableDumper.Utils.Extensions;
 using Newtonsoft.Json;
+using RoR2.Navigation;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -40,6 +41,8 @@ namespace AddressableDumper.ValueDumper.Serialization
         }
 
         static readonly IFormatProvider _formatProvider = new DumpedValueFormatter();
+
+        readonly IHashProvider _hashProvider = new DumpedValueHasher();
 
         readonly JsonWriter _writer;
         readonly object _rootValue;
@@ -154,7 +157,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             }
         }
 
-        bool buildCollectionWriteOperation(object value, WriteOperationBuilder builder, int maxCount = 50)
+        bool buildCollectionWriteOperation(object value, WriteOperationBuilder builder, int maxCount = 150)
         {
             if (value is null)
             {
@@ -180,7 +183,23 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     if (writtenItems >= maxCount)
                     {
-                        builder.AddComment($"... Remaining {collection.Count - writtenItems} value(s) excluded ...");
+                        byte[] elementsHash = _hashProvider.ComputeHash(value);
+                        string hashString = Convert.ToBase64String(elementsHash);
+
+                        StringBuilder commentBuilder = HG.StringBuilderPool.RentStringBuilder();
+
+                        commentBuilder.Append($"... Remaining {collection.Count - writtenItems} value(s) excluded ");
+
+                        if (!string.IsNullOrEmpty(hashString))
+                        {
+                            commentBuilder.Append($"(hash: '{hashString}') ");
+                        }
+
+                        commentBuilder.Append("...");
+
+                        builder.AddComment(commentBuilder.ToString());
+
+                        commentBuilder = HG.StringBuilderPool.ReturnStringBuilder(commentBuilder);
                         break;
                     }
 
@@ -1185,6 +1204,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                     if (!serializationContext.IncludeObsolete && member.GetCustomAttribute(typeof(ObsoleteAttribute)) != null)
                         continue;
 
+                    bool appendValueHashInstead = false;
+
                     if (baseType == typeof(Renderer))
                     {
                         switch (member.Name)
@@ -1225,6 +1246,41 @@ namespace AddressableDumper.ValueDumper.Serialization
                             // Does not make sense for value dump, effectively a random value every dump
                             case nameof(Texture.updateCount):
                                 continue;
+                        }
+                    }
+                    else if (baseType == typeof(Mesh))
+                    {
+                        switch (member.Name)
+                        {
+                            case nameof(Mesh.bindposes):
+                            case nameof(Mesh.vertices):
+                            case nameof(Mesh.normals):
+                            case nameof(Mesh.tangents):
+                            case nameof(Mesh.uv):
+                            case nameof(Mesh.uv2):
+                            case nameof(Mesh.uv3):
+                            case nameof(Mesh.uv4):
+                            case nameof(Mesh.uv5):
+                            case nameof(Mesh.uv6):
+                            case nameof(Mesh.uv7):
+                            case nameof(Mesh.uv8):
+                            case nameof(Mesh.colors):
+                            case nameof(Mesh.colors32):
+                            case nameof(Mesh.triangles):
+                            case nameof(Mesh.boneWeights):
+                                appendValueHashInstead = true;
+                                break;
+                        }
+                    }
+                    else if (baseType == typeof(Sprite))
+                    {
+                        switch (member.Name)
+                        {
+                            case nameof(Sprite.vertices):
+                            case nameof(Sprite.triangles):
+                            case nameof(Sprite.uv):
+                                appendValueHashInstead = true;
+                                break;
                         }
                     }
                     else if (baseType == typeof(Canvas))
@@ -1295,9 +1351,38 @@ namespace AddressableDumper.ValueDumper.Serialization
                             throw new NotImplementedException($"Member type {member.MemberType} ({member}) is not implemented");
                     }
 
-                    if (!tryBuildPropertyWithValueWriteOperation(member.Name, memberValue, builder))
+                    if (memberType.IsArray)
                     {
-                        Log.Warning($"Failed to determine write operation for serialized {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberType.Name})");
+                        Type elementType = memberType.GetElementType();
+                        if (elementType == typeof(NodeGraph.Node) || elementType == typeof(NodeGraph.Link))
+                        {
+                            appendValueHashInstead = true;
+                        }
+                        else if (!appendValueHashInstead)
+                        {
+                            if (memberValue is Array array)
+                            {
+                                if (array.Length > 200)
+                                {
+                                    Log.Warning($"Large array with {array.Length} elements at {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberType.Name}), consider allowing hash?");
+                                }
+                            }
+                        }
+                    }
+
+                    if (appendValueHashInstead)
+                    {
+                        byte[] hashBytes = _hashProvider.ComputeHash(memberValue);
+
+                        builder.AddPropertyName(member.Name);
+                        builder.AddValueRaw($"valuehash('{Convert.ToBase64String(hashBytes)}')");
+                    }
+                    else
+                    {
+                        if (!tryBuildPropertyWithValueWriteOperation(member.Name, memberValue, builder))
+                        {
+                            Log.Warning($"Failed to determine write operation for serialized {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberType.Name})");
+                        }
                     }
                 }
             }
