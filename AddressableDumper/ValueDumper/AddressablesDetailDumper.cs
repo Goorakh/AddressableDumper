@@ -23,11 +23,9 @@ namespace AddressableDumper.ValueDumper
             foreach (AssetInfo assetInfo in assetInfos)
             {
                 FilePath dumpFilePath = System.IO.Path.Combine(_addressablesDumpPath, assetInfo.Key) + ".txt";
+                dumpFilePath.FileNameWithoutExtension += $" ({assetInfo.AssetType.Name})";
 
                 Directory.CreateDirectory(dumpFilePath.DirectoryName);
-
-                if (dumpFilePath.Exists)
-                    dumpFilePath.FileNameWithoutExtension += $" ({assetInfo.AssetType.Name})";
 
                 dumpFilePath.MakeUnique();
 

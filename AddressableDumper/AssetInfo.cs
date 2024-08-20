@@ -3,7 +3,7 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 
 namespace AddressableDumper
 {
-    public readonly struct AssetInfo
+    public readonly struct AssetInfo : IComparable<AssetInfo>
     {
         public readonly IResourceLocation Location;
 
@@ -31,6 +31,17 @@ namespace AddressableDumper
         public override string ToString()
         {
             return Key;
+        }
+
+        public readonly int CompareTo(AssetInfo other)
+        {
+            int keyComparison = Key.CompareTo(other.Key);
+            if (keyComparison == 0)
+            {
+                return AssetType.AssemblyQualifiedName.CompareTo(other.AssetType.AssemblyQualifiedName);
+            }
+
+            return keyComparison;
         }
     }
 }

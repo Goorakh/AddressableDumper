@@ -216,7 +216,7 @@ namespace AddressableDumper
                 }
             }
 
-            assetInfos.Sort((a, b) => a.Key.CompareTo(b.Key));
+            assetInfos.Sort();
 
             _allAssetInfos = assetInfos.ToArray();
 
