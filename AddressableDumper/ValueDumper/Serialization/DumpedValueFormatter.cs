@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Globalization;
-using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
@@ -85,6 +85,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return $"[{layerNames}] ({mask})";
                 case PropertyName propertyName:
                     return propertyName.ToString();
+                case NetworkHash128 networkHash128:
+                    return $"NetworkHash128({networkHash128})";
+                case NetworkSceneId networkSceneId:
+                    return $"NetworkSceneId({formatSubArg(networkSceneId.Value)})";
                 default:
                     throw new NotImplementedException($"Unhandled argument type '{arg.GetType().Name}'");
             }
