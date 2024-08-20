@@ -146,6 +146,15 @@ namespace AddressableDumper.ValueDumper
                 Directory.CreateDirectory(rootObjectsDirectory);
 
                 GameObject[] rootObjects = sceneInstance.GetRootGameObjects();
+
+                HashSet<Transform> rootTransformsSet = [];
+                foreach (GameObject rootObject in rootObjects)
+                {
+                    rootTransformsSet.Add(rootObject.transform.root);
+                }
+
+                Transform[] rootTransforms = rootTransformsSet.ToArray();
+
                 for (int i = 0; i < rootObjects.Length; i++)
                 {
                     GameObject rootObject = rootObjects[i];
@@ -171,7 +180,8 @@ namespace AddressableDumper.ValueDumper
 
                             ObjectSerializer serializer = new ObjectSerializer(jsonWriter, rootObject)
                             {
-                                SerializingScene = sceneInstance
+                                SerializingScene = sceneInstance,
+                                AdditionalReferenceRoots = rootTransforms
                             };
 
                             serializer.Write();

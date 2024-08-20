@@ -50,6 +50,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         public Scene? SerializingScene { get; set; }
 
+        public Transform[] AdditionalReferenceRoots { get; set; } = [];
+
         public ObjectSerializer(JsonWriter writer, object value)
         {
             _writer = writer;
@@ -879,6 +881,15 @@ namespace AddressableDumper.ValueDumper.Serialization
                     stringBuilder = HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
 
                     return true;
+                }
+
+                foreach (Transform referenceRoot in AdditionalReferenceRoots)
+                {
+                    if (tryGetChildRefString(obj, referenceRoot, out string childRefString))
+                    {
+                        builder.AddValueRaw(childRefString);
+                        return true;
+                    }
                 }
 
                 SerializingObjectStep[] serializingSteps = _serializingObjectStack.ToArray();
