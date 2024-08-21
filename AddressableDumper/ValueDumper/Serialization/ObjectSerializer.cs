@@ -9,6 +9,8 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
 
 namespace AddressableDumper.ValueDumper.Serialization
@@ -500,6 +502,14 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     return true;
                 }
+                case SphericalHarmonicsL2 sphericalHarmonicsL2:
+                {
+                    byte[] valueHash = _hashProvider.ComputeHash(sphericalHarmonicsL2);
+
+                    builder.AddValueRaw($"valuehash('{Convert.ToBase64String(valueHash)}')");
+
+                    return true;
+                }
                 case GradientColorKey:
                 case GradientAlphaKey:
                 case SkeletonBone:
@@ -561,6 +571,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case AnimatorClipInfo:
                 case TreePrototype:
                 case DetailPrototype:
+                case PostProcessBundle:
+                case AnimatorControllerParameter:
                 {
                     builder.AddStartObject();
 
@@ -701,6 +713,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case HumanDescription:
                 case HumanBone:
                 case CharacterInfo:
+                case Attribute:
                 {
                     builder.AddStartObject();
 
@@ -1268,6 +1281,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                             case nameof(Mesh.colors32):
                             case nameof(Mesh.triangles):
                             case nameof(Mesh.boneWeights):
+                                Mesh meshInstance = value as Mesh;
+                                if (meshInstance && !meshInstance.isReadable)
+                                    continue;
+
                                 appendValueHashInstead = true;
                                 break;
                         }

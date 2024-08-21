@@ -75,6 +75,13 @@ namespace AddressableDumper.ValueDumper.Serialization
                     writer.Write(vector4.w);
 
                     return;
+                case Quaternion quaternion:
+                    writer.Write(quaternion.x);
+                    writer.Write(quaternion.y);
+                    writer.Write(quaternion.z);
+                    writer.Write(quaternion.w);
+
+                    return;
                 case Matrix4x4 matrix4x4:
                     for (int i = 0; i < 4; i++)
                     {
@@ -105,6 +112,11 @@ namespace AddressableDumper.ValueDumper.Serialization
                     writer.Write(boneWeight.boneIndex1);
                     writer.Write(boneWeight.boneIndex2);
                     writer.Write(boneWeight.boneIndex3);
+                    return;
+                case ClothSkinningCoefficient clothSkinningCoefficient:
+                    writer.Write(clothSkinningCoefficient.maxDistance);
+                    writer.Write(clothSkinningCoefficient.collisionSphereDistance);
+
                     return;
             }
 

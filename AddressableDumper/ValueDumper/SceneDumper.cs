@@ -188,6 +188,8 @@ namespace AddressableDumper.ValueDumper
                     FilePath objectDumpPath = System.IO.Path.Combine(rootObjectsDirectory, fileName + ".txt");
                     objectDumpPath.MakeUnique();
 
+                    Log.Info($"Dumping '{sceneInstance.name}' root object '{rootObject.name}' to {objectDumpPath.FullPath}");
+
                     using (FileStream fileStream = File.Open(objectDumpPath, FileMode.CreateNew, FileAccess.Write))
                     {
                         using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
