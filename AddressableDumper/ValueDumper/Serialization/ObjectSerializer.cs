@@ -1175,6 +1175,139 @@ namespace AddressableDumper.ValueDumper.Serialization
                                                       false);
             });
 
+            // TODO: Check for standard shader/material and don't serialize if so
+            switch (value)
+            {
+                case Shader shader:
+                {
+                    builder.AddPropertyName("properties");
+
+                    builder.AddStartArray();
+
+                    int propertyCount = shader.GetPropertyCount();
+                    for (int i = 0; i < propertyCount; i++)
+                    {
+                        builder.AddStartObject();
+
+                        string propertyName = shader.GetPropertyName(i);
+                        buildPropertyWithValueWriteOperation("name", propertyName, builder, serializationArgs);
+
+                        ShaderPropertyType propertyType = shader.GetPropertyType(i);
+                        buildPropertyWithValueWriteOperation("type", propertyType, builder, serializationArgs);
+
+                        string propertyDescription = shader.GetPropertyDescription(i);
+                        buildPropertyWithValueWriteOperation("description", propertyDescription, builder, serializationArgs);
+
+                        string[] propertyAttributes = shader.GetPropertyAttributes(i);
+                        buildPropertyWithValueWriteOperation("attributes", propertyAttributes, builder, serializationArgs);
+
+                        ShaderPropertyFlags propertyFlags = shader.GetPropertyFlags(i);
+                        buildPropertyWithValueWriteOperation("flags", propertyFlags, builder, serializationArgs);
+
+                        object defaultValue;
+                        switch (propertyType)
+                        {
+                            case ShaderPropertyType.Color:
+                                defaultValue = (Color)shader.GetPropertyDefaultVectorValue(i);
+                                break;
+                            case ShaderPropertyType.Vector:
+                                defaultValue = shader.GetPropertyDefaultVectorValue(i);
+                                break;
+                            case ShaderPropertyType.Float:
+                            case ShaderPropertyType.Range:
+                                defaultValue = shader.GetPropertyDefaultFloatValue(i);
+                                break;
+                            case ShaderPropertyType.Texture:
+                                defaultValue = shader.GetPropertyTextureDefaultName(i);
+                                break;
+                            default:
+                                throw new NotImplementedException($"Property type {propertyType} is not implemented");
+                        }
+
+                        buildPropertyWithValueWriteOperation("defaultValue", defaultValue, builder, serializationArgs);
+
+                        switch (propertyType)
+                        {
+                            case ShaderPropertyType.Range:
+                                Vector2 rangeLimits = shader.GetPropertyRangeLimits(i);
+                                builder.AddPropertyName("rangeLimits");
+
+                                builder.AddStartObject();
+
+                                buildPropertyWithValueWriteOperation("min", rangeLimits.x, builder, serializationArgs);
+                                buildPropertyWithValueWriteOperation("max", rangeLimits.y, builder, serializationArgs);
+
+                                builder.AddEndObject();
+                                break;
+                            case ShaderPropertyType.Texture:
+                                TextureDimension textureDimension = shader.GetPropertyTextureDimension(i);
+                                buildPropertyWithValueWriteOperation("textureDimension", textureDimension, builder, serializationArgs);
+                                break;
+                        }
+
+                        builder.AddEndObject();
+                    }
+
+                    builder.AddEndArray();
+                    break;
+                }
+                case Material material when material.shader:
+                {
+                    Shader shader = material.shader;
+
+                    builder.AddPropertyName("passes");
+
+                    builder.AddStartArray();
+
+                    for (int i = 0; i < material.passCount; i++)
+                    {
+                        builder.AddValue(material.GetPassName(i));
+                    }
+
+                    builder.AddEndArray();
+
+                    builder.AddPropertyName("properties");
+
+                    builder.AddStartObject();
+
+                    int propertyCount = shader.GetPropertyCount();
+                    for (int i = 0; i < propertyCount; i++)
+                    {
+                        string propertyName = shader.GetPropertyName(i);
+                        builder.AddPropertyName(propertyName);
+
+                        int propertyNameId = shader.GetPropertyNameId(i);
+                        ShaderPropertyType propertyType = shader.GetPropertyType(i);
+
+                        object propertyValue;
+                        switch (propertyType)
+                        {
+                            case ShaderPropertyType.Color:
+                                propertyValue = material.GetColor(propertyNameId);
+                                break;
+                            case ShaderPropertyType.Vector:
+                                propertyValue = material.GetVector(propertyNameId);
+                                break;
+                            case ShaderPropertyType.Float:
+                            case ShaderPropertyType.Range:
+                                propertyValue = material.GetFloat(propertyNameId);
+                                break;
+                            case ShaderPropertyType.Texture:
+                                propertyValue = material.GetTexture(propertyNameId);
+                                break;
+                            default:
+                                throw new NotImplementedException($"Property type {propertyType} is not implemented");
+                        }
+
+                        buildWriteOperation(propertyValue, builder, serializationArgs);
+                    }
+
+                    builder.AddEndObject();
+
+                    break;
+                }
+            }
+
             builder.AddEndObject();
 
             return true;
