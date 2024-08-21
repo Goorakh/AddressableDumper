@@ -118,6 +118,16 @@ namespace AddressableDumper.ValueDumper.Serialization
                     writer.Write(clothSkinningCoefficient.collisionSphereDistance);
 
                     return;
+                case TreeInstance treeInstance:
+                    writeValue(writer, treeInstance.position);
+                    writer.Write(treeInstance.widthScale);
+                    writer.Write(treeInstance.heightScale);
+                    writer.Write(treeInstance.rotation);
+                    writeValue(writer, treeInstance.color);
+                    writeValue(writer, treeInstance.lightmapColor);
+                    writer.Write(treeInstance.prototypeIndex);
+
+                    return;
             }
 
             if (value is IEnumerable enumerable)
