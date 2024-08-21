@@ -1,6 +1,7 @@
 ﻿using AddressableDumper.Utils;
 using AddressableDumper.Utils.Extensions;
 using Newtonsoft.Json;
+using RoR2;
 using RoR2.Navigation;
 using System;
 using System.Collections;
@@ -17,6 +18,13 @@ namespace AddressableDumper.ValueDumper.Serialization
 {
     public class ObjectSerializer
     {
+        struct ObjectSerializationArgs
+        {
+            public int MaxCollectionCapacity;
+
+            public string CustomFormat;
+        }
+
         readonly struct SerializingObjectStep
         {
             public readonly object Value;
@@ -65,16 +73,22 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         public void Write()
         {
-            writeValue(_rootValue);
+            ObjectSerializationArgs serializationArgs = new ObjectSerializationArgs
+            {
+                MaxCollectionCapacity = 150,
+                CustomFormat = null
+            };
+
+            writeValue(_rootValue, serializationArgs);
         }
 
-        void writeValue(object value)
+        void writeValue(object value, in ObjectSerializationArgs serializationArgs)
         {
             WriteOperationBuilder builder = new WriteOperationBuilder(new JsonWriteOperationBuilderWriter(_writer));
 
             try
             {
-                if (!buildWriteOperation(value, builder))
+                if (!buildWriteOperation(value, builder, serializationArgs))
                 {
                     Log.Warning($"Failed to determine write operation for value {value} ({value?.GetType()?.Name})");
                     builder.AddNull($"Failed to serialize value of type '{value?.GetType()?.Name ?? "null"}'");
@@ -99,7 +113,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             }
         }
         
-        bool buildWriteOperation(object value, WriteOperationBuilder builder)
+        bool buildWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             // TODO: This does not detect recursive references in value types
             foreach (SerializingObjectStep step in _serializingObjectStack)
@@ -119,7 +133,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             _serializingObjectStack.Push(new SerializingObjectStep(value));
 
-            bool anythingWritten = buildWrite(value, builder);
+            bool anythingWritten = buildWrite(value, builder, serializationArgs);
 
             if (_serializingObjectStack.Count == 0 || !ReferenceEquals(_serializingObjectStack.Peek().Value, value))
             {
@@ -129,7 +143,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             _serializingObjectStack.Pop();
             return anythingWritten;
 
-            bool buildWrite(object value, WriteOperationBuilder builder)
+            bool buildWrite(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
             {
                 if (value is null)
                 {
@@ -143,23 +157,23 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return true;
                 }
 
-                if (buildCustomFormattedWriteOperation(value, builder))
+                if (buildCustomFormattedWriteOperation(value, builder, serializationArgs))
                     return true;
                 
-                if (buildCollectionWriteOperation(value, builder))
+                if (buildCollectionWriteOperation(value, builder, serializationArgs))
                     return true;
 
-                if (buildUnityObjectWriteOperation(value, builder))
+                if (buildUnityObjectWriteOperation(value, builder, serializationArgs))
                     return true;
 
-                if (getSerializableTypeWriteOperation(value, builder))
+                if (getSerializableTypeWriteOperation(value, builder, serializationArgs))
                     return true;
 
                 return false;
             }
         }
 
-        bool buildCollectionWriteOperation(object value, WriteOperationBuilder builder, int maxCount = 150)
+        bool buildCollectionWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             if (value is null)
             {
@@ -183,7 +197,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 int writtenItems = 0;
                 foreach (object element in collection)
                 {
-                    if (writtenItems >= maxCount)
+                    if (writtenItems >= serializationArgs.MaxCollectionCapacity)
                     {
                         byte[] elementsHash = _hashProvider.ComputeHash(value);
                         string hashString = Convert.ToBase64String(elementsHash);
@@ -205,7 +219,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                         break;
                     }
 
-                    if (buildWriteOperation(element, builder))
+                    if (buildWriteOperation(element, builder, serializationArgs))
                     {
                         writtenItems++;
                     }
@@ -223,7 +237,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             return false;
         }
 
-        bool getSerializableTypeWriteOperation(object value, WriteOperationBuilder builder)
+        bool getSerializableTypeWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             if (value is null)
             {
@@ -243,7 +257,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             serializedObjectBuilder.AddStartObject();
 
-            buildTypeFieldWriteOperation(type, serializedObjectBuilder);
+            buildTypeFieldWriteOperation(type, serializedObjectBuilder, serializationArgs);
 
             List<Type> hierarchyTypes = ReflectionUtils.GetHierarchyTypes(type);
             hierarchyTypes.Reverse();
@@ -277,7 +291,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                         continue;
                     }
 
-                    if (tryBuildPropertyWithValueWriteOperation(field.Name, fieldValue, serializedObjectBuilder))
+                    if (tryBuildPropertyWithValueWriteOperation(field.Name, fieldValue, serializedObjectBuilder, serializationArgs))
                     {
                         anyFieldWritten = true;
 
@@ -304,7 +318,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             }
         }
 
-        bool tryBuildPropertyWithValueWriteOperation(string propertyName, object value, WriteOperationBuilder builder)
+        bool tryBuildPropertyWithValueWriteOperation(string propertyName, object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             WriteOperationBuilder propertyValueBuilder = new WriteOperationBuilder(builder)
             {
@@ -316,7 +330,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             propertyValueBuilder.AutoFlush = true;
 
-            if (buildWriteOperation(value, propertyValueBuilder))
+            if (buildWriteOperation(value, propertyValueBuilder, serializationArgs))
             {
                 propertyValueBuilder.Flush();
                 return true;
@@ -327,23 +341,24 @@ namespace AddressableDumper.ValueDumper.Serialization
             }
         }
 
-        void buildPropertyWithValueWriteOperation(string propertyName, object value, WriteOperationBuilder builder)
+        void buildPropertyWithValueWriteOperation(string propertyName, object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             builder.AddPropertyName(propertyName);
 
-            if (!buildWriteOperation(value, builder))
+            if (!buildWriteOperation(value, builder, serializationArgs))
             {
                 throw new ArgumentException($"Value {value} ({value?.GetType().FullName}) was not serialized for property '{propertyName}'");
             }
         }
 
-        void buildTypeFieldWriteOperation(Type type, WriteOperationBuilder builder)
+        void buildTypeFieldWriteOperation(Type type, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
-            buildPropertyWithValueWriteOperation("$type", type.FullName, builder);
+            buildPropertyWithValueWriteOperation("$type", type.FullName, builder, serializationArgs);
         }
 
-        bool buildCustomFormattedWriteOperation(object value, WriteOperationBuilder builder, string formatString = "")
+        bool buildCustomFormattedWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
+            string formatString = serializationArgs.CustomFormat;
             if (string.IsNullOrWhiteSpace(formatString))
             {
                 formatString = "{0}";
@@ -388,7 +403,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     for (int i = 0; i < 4; i++)
                     {
-                        buildPropertyWithValueWriteOperation($"row{i}", matrix4x4.GetRow(i), builder);
+                        buildPropertyWithValueWriteOperation($"row{i}", matrix4x4.GetRow(i), builder, serializationArgs);
                     }
 
                     builder.AddEndObject();
@@ -399,27 +414,27 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     builder.AddStartObject();
 
-                    buildTypeFieldWriteOperation(value.GetType(), builder);
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("mode", minMaxCurve.mode, builder);
+                    buildPropertyWithValueWriteOperation("mode", minMaxCurve.mode, builder, serializationArgs);
 
                     switch (minMaxCurve.mode)
                     {
                         case ParticleSystemCurveMode.Constant:
-                            buildPropertyWithValueWriteOperation("constant", minMaxCurve.constantMax, builder);
+                            buildPropertyWithValueWriteOperation("constant", minMaxCurve.constantMax, builder, serializationArgs);
                             break;
                         case ParticleSystemCurveMode.Curve:
-                            buildPropertyWithValueWriteOperation("curveMultiplier", minMaxCurve.curveMultiplier, builder);
-                            buildPropertyWithValueWriteOperation("curve", minMaxCurve.curveMax, builder);
+                            buildPropertyWithValueWriteOperation("curveMultiplier", minMaxCurve.curveMultiplier, builder, serializationArgs);
+                            buildPropertyWithValueWriteOperation("curve", minMaxCurve.curveMax, builder, serializationArgs);
                             break;
                         case ParticleSystemCurveMode.TwoCurves:
-                            buildPropertyWithValueWriteOperation("curveMultiplier", minMaxCurve.curveMultiplier, builder);
-                            buildPropertyWithValueWriteOperation("curveMin", minMaxCurve.curveMin, builder);
-                            buildPropertyWithValueWriteOperation("curveMax", minMaxCurve.curveMax, builder);
+                            buildPropertyWithValueWriteOperation("curveMultiplier", minMaxCurve.curveMultiplier, builder, serializationArgs);
+                            buildPropertyWithValueWriteOperation("curveMin", minMaxCurve.curveMin, builder, serializationArgs);
+                            buildPropertyWithValueWriteOperation("curveMax", minMaxCurve.curveMax, builder, serializationArgs);
                             break;
                         case ParticleSystemCurveMode.TwoConstants:
-                            buildPropertyWithValueWriteOperation("constantMin", minMaxCurve.constantMin, builder);
-                            buildPropertyWithValueWriteOperation("constantMax", minMaxCurve.constantMax, builder);
+                            buildPropertyWithValueWriteOperation("constantMin", minMaxCurve.constantMin, builder, serializationArgs);
+                            buildPropertyWithValueWriteOperation("constantMax", minMaxCurve.constantMax, builder, serializationArgs);
                             break;
                         default:
                             break;
@@ -433,28 +448,28 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     builder.AddStartObject();
 
-                    buildTypeFieldWriteOperation(value.GetType(), builder);
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("mode", minMaxGradient.mode, builder);
+                    buildPropertyWithValueWriteOperation("mode", minMaxGradient.mode, builder, serializationArgs);
 
                     switch (minMaxGradient.mode)
                     {
                         case ParticleSystemGradientMode.Color:
-                            buildPropertyWithValueWriteOperation("color", minMaxGradient.colorMax, builder);
+                            buildPropertyWithValueWriteOperation("color", minMaxGradient.colorMax, builder, serializationArgs);
                             break;
                         case ParticleSystemGradientMode.Gradient:
-                            buildPropertyWithValueWriteOperation("gradient", minMaxGradient.gradientMax, builder);
+                            buildPropertyWithValueWriteOperation("gradient", minMaxGradient.gradientMax, builder, serializationArgs);
                             break;
                         case ParticleSystemGradientMode.TwoColors:
-                            buildPropertyWithValueWriteOperation("colorMin", minMaxGradient.colorMin, builder);
-                            buildPropertyWithValueWriteOperation("colorMax", minMaxGradient.colorMax, builder);
+                            buildPropertyWithValueWriteOperation("colorMin", minMaxGradient.colorMin, builder, serializationArgs);
+                            buildPropertyWithValueWriteOperation("colorMax", minMaxGradient.colorMax, builder, serializationArgs);
                             break;
                         case ParticleSystemGradientMode.TwoGradients:
-                            buildPropertyWithValueWriteOperation("gradientMin", minMaxGradient.gradientMin, builder);
-                            buildPropertyWithValueWriteOperation("gradientMax", minMaxGradient.gradientMax, builder);
+                            buildPropertyWithValueWriteOperation("gradientMin", minMaxGradient.gradientMin, builder, serializationArgs);
+                            buildPropertyWithValueWriteOperation("gradientMax", minMaxGradient.gradientMax, builder, serializationArgs);
                             break;
                         case ParticleSystemGradientMode.RandomColor:
-                            buildPropertyWithValueWriteOperation("colorCurve", minMaxGradient.gradientMax, builder);
+                            buildPropertyWithValueWriteOperation("colorCurve", minMaxGradient.gradientMax, builder, serializationArgs);
                             break;
                         default:
                             throw new NotImplementedException($"{minMaxGradient.mode} is not implemented");
@@ -468,34 +483,34 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     builder.AddStartObject();
 
-                    buildTypeFieldWriteOperation(value.GetType(), builder);
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("time", animationEvent.time, builder);
+                    buildPropertyWithValueWriteOperation("time", animationEvent.time, builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("functionName", animationEvent.functionName, builder);
+                    buildPropertyWithValueWriteOperation("functionName", animationEvent.functionName, builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("stringParameter", animationEvent.stringParameter, builder);
+                    buildPropertyWithValueWriteOperation("stringParameter", animationEvent.stringParameter, builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("floatParameter", animationEvent.floatParameter, builder);
+                    buildPropertyWithValueWriteOperation("floatParameter", animationEvent.floatParameter, builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("intParameter", animationEvent.intParameter, builder);
+                    buildPropertyWithValueWriteOperation("intParameter", animationEvent.intParameter, builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("objectReferenceParameter", animationEvent.objectReferenceParameter, builder);
+                    buildPropertyWithValueWriteOperation("objectReferenceParameter", animationEvent.objectReferenceParameter, builder, serializationArgs);
 
-                    buildPropertyWithValueWriteOperation("isFiredByLegacy", animationEvent.isFiredByLegacy, builder);
+                    buildPropertyWithValueWriteOperation("isFiredByLegacy", animationEvent.isFiredByLegacy, builder, serializationArgs);
 
                     if (animationEvent.isFiredByLegacy)
                     {
-                        buildPropertyWithValueWriteOperation("animationState", animationEvent.animationState, builder);
+                        buildPropertyWithValueWriteOperation("animationState", animationEvent.animationState, builder, serializationArgs);
                     }
 
-                    buildPropertyWithValueWriteOperation("isFiredByAnimator", animationEvent.isFiredByAnimator, builder);
+                    buildPropertyWithValueWriteOperation("isFiredByAnimator", animationEvent.isFiredByAnimator, builder, serializationArgs);
 
                     if (animationEvent.isFiredByAnimator)
                     {
-                        buildPropertyWithValueWriteOperation("animatorStateInfo", animationEvent.animatorStateInfo, builder);
+                        buildPropertyWithValueWriteOperation("animatorStateInfo", animationEvent.animatorStateInfo, builder, serializationArgs);
 
-                        buildPropertyWithValueWriteOperation("animatorClipInfo", animationEvent.animatorClipInfo, builder);
+                        buildPropertyWithValueWriteOperation("animatorClipInfo", animationEvent.animatorClipInfo, builder, serializationArgs);
                     }
 
                     builder.AddEndObject();
@@ -520,9 +535,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     builder.AddStartObject();
 
-                    buildTypeFieldWriteOperation(value.GetType(), builder);
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
 
-                    buildSerializedMemberWriteOperations(value, builder, t =>
+                    buildSerializedMemberWriteOperations(value, builder, serializationArgs, t =>
                     {
                         return new MemberSerializationContext(MemberTypes.Field,
                                                               false,
@@ -576,9 +591,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     builder.AddStartObject();
 
-                    buildTypeFieldWriteOperation(value.GetType(), builder);
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
 
-                    buildSerializedMemberWriteOperations(value, builder, t =>
+                    buildSerializedMemberWriteOperations(value, builder, serializationArgs, t =>
                     {
                         return new MemberSerializationContext(MemberTypes.Property,
                                                               false,
@@ -594,7 +609,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                             int burstCount = emissionModule.GetBursts(bursts);
                             Array.Resize(ref bursts, burstCount);
 
-                            buildPropertyWithValueWriteOperation("bursts", bursts, builder);
+                            buildPropertyWithValueWriteOperation("bursts", bursts, builder, serializationArgs);
 
                             break;
                         }
@@ -607,7 +622,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 planes[i] = collisionModule.GetPlane(i);
                             }
 
-                            buildPropertyWithValueWriteOperation("planes", planes, builder);
+                            buildPropertyWithValueWriteOperation("planes", planes, builder, serializationArgs);
 
                             break;
                         }
@@ -620,7 +635,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 colliders[i] = triggerModule.GetCollider(i);
                             }
 
-                            buildPropertyWithValueWriteOperation("colliders", colliders, builder);
+                            buildPropertyWithValueWriteOperation("colliders", colliders, builder, serializationArgs);
 
                             break;
                         }
@@ -634,16 +649,16 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 builder.AddStartObject();
 
                                 ParticleSystem emitterParticleSystem = subEmitters.GetSubEmitterSystem(i);
-                                buildPropertyWithValueWriteOperation("emitterParticleSystem", emitterParticleSystem, builder);
+                                buildPropertyWithValueWriteOperation("emitterParticleSystem", emitterParticleSystem, builder, serializationArgs);
 
                                 ParticleSystemSubEmitterType emitterType = subEmitters.GetSubEmitterType(i);
-                                buildPropertyWithValueWriteOperation("emitterType", emitterType, builder);
+                                buildPropertyWithValueWriteOperation("emitterType", emitterType, builder, serializationArgs);
 
                                 ParticleSystemSubEmitterProperties emitterProperties = subEmitters.GetSubEmitterProperties(i);
-                                buildPropertyWithValueWriteOperation("emitterProperties", emitterProperties, builder);
+                                buildPropertyWithValueWriteOperation("emitterProperties", emitterProperties, builder, serializationArgs);
 
                                 float emitterProbability = subEmitters.GetSubEmitterEmitProbability(i);
-                                buildPropertyWithValueWriteOperation("emitterProbability", emitterProbability, builder);
+                                buildPropertyWithValueWriteOperation("emitterProbability", emitterProbability, builder, serializationArgs);
 
                                 builder.AddEndObject();
                             }
@@ -660,7 +675,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                             for (int i = 0; i < textureSheetAnimationModule.spriteCount; i++)
                             {
                                 Sprite sprite = textureSheetAnimationModule.GetSprite(i);
-                                buildWriteOperation(sprite, builder);
+                                buildWriteOperation(sprite, builder, serializationArgs);
                             }
 
                             builder.AddEndArray();
@@ -676,26 +691,26 @@ namespace AddressableDumper.ValueDumper.Serialization
                             {
                                 builder.AddStartObject();
 
-                                buildPropertyWithValueWriteOperation("stream", stream, builder);
+                                buildPropertyWithValueWriteOperation("stream", stream, builder, serializationArgs);
 
                                 ParticleSystemCustomDataMode mode = customDataModule.GetMode(stream);
-                                buildPropertyWithValueWriteOperation("mode", mode, builder);
+                                buildPropertyWithValueWriteOperation("mode", mode, builder, serializationArgs);
 
                                 int vectorComponentCount = customDataModule.GetVectorComponentCount(stream);
-                                buildPropertyWithValueWriteOperation("vectorComponentCount", vectorComponentCount, builder);
+                                buildPropertyWithValueWriteOperation("vectorComponentCount", vectorComponentCount, builder, serializationArgs);
 
                                 builder.AddPropertyName("vectorComponents");
                                 builder.AddStartArray();
 
                                 for (int i = 0; i < vectorComponentCount; i++)
                                 {
-                                    buildWriteOperation(customDataModule.GetVector(stream, i), builder);
+                                    buildWriteOperation(customDataModule.GetVector(stream, i), builder, serializationArgs);
                                 }
 
                                 builder.AddEndArray();
 
                                 ParticleSystem.MinMaxGradient color = customDataModule.GetColor(stream);
-                                buildPropertyWithValueWriteOperation("color", color, builder);
+                                buildPropertyWithValueWriteOperation("color", color, builder, serializationArgs);
 
                                 builder.AddEndObject();
                             }
@@ -717,9 +732,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     builder.AddStartObject();
 
-                    buildTypeFieldWriteOperation(value.GetType(), builder);
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
 
-                    buildSerializedMemberWriteOperations(value, builder, t =>
+                    buildSerializedMemberWriteOperations(value, builder, serializationArgs, t =>
                     {
                         return new MemberSerializationContext(MemberTypes.Field | MemberTypes.Property,
                                                               false,
@@ -735,7 +750,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             return false;
         }
 
-        bool buildUnityObjectWriteOperation(object value, WriteOperationBuilder builder)
+        bool buildUnityObjectWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             if (value is not UnityEngine.Object obj || !obj)
                 return false;
@@ -951,16 +966,16 @@ namespace AddressableDumper.ValueDumper.Serialization
                 }
             }
 
-            if (buildGameObjectWriteOperation(obj, builder))
+            if (buildGameObjectWriteOperation(obj, builder, serializationArgs))
                 return true;
 
-            if (buildGenericUnityObjectWriteOperation(obj, builder))
+            if (buildGenericUnityObjectWriteOperation(obj, builder, serializationArgs))
                 return true;
 
             return false;
         }
 
-        bool buildGameObjectWriteOperation(UnityEngine.Object value, WriteOperationBuilder builder)
+        bool buildGameObjectWriteOperation(UnityEngine.Object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             GameObject gameObject = value.GetGameObject();
             if (gameObject is null)
@@ -975,32 +990,32 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             if (tryGetChildIndex(transform, out int childIndex))
             {
-                buildPropertyWithValueWriteOperation("$child_idx", childIndex, builder);
+                buildPropertyWithValueWriteOperation("$child_idx", childIndex, builder, serializationArgs);
             }
 
-            buildPropertyWithValueWriteOperation("name", gameObject.name, builder);
+            buildPropertyWithValueWriteOperation("name", gameObject.name, builder, serializationArgs);
 
-            buildPropertyWithValueWriteOperation("hideFlags", gameObject.hideFlags, builder);
+            buildPropertyWithValueWriteOperation("hideFlags", gameObject.hideFlags, builder, serializationArgs);
 
-            buildPropertyWithValueWriteOperation("layer", (LayerMask)(1 << gameObject.layer), builder);
+            buildPropertyWithValueWriteOperation("layer", (LayerMask)(1 << gameObject.layer), builder, serializationArgs);
 
-            buildPropertyWithValueWriteOperation("activeSelf", gameObject.activeSelf, builder);
+            buildPropertyWithValueWriteOperation("activeSelf", gameObject.activeSelf, builder, serializationArgs);
 
-            buildPropertyWithValueWriteOperation("activeInHierarchy", gameObject.activeInHierarchy, builder);
+            buildPropertyWithValueWriteOperation("activeInHierarchy", gameObject.activeInHierarchy, builder, serializationArgs);
 
-            buildPropertyWithValueWriteOperation("isStatic", gameObject.isStatic, builder);
+            buildPropertyWithValueWriteOperation("isStatic", gameObject.isStatic, builder, serializationArgs);
 
-            buildPropertyWithValueWriteOperation("tag", gameObject.tag, builder);
+            buildPropertyWithValueWriteOperation("tag", gameObject.tag, builder, serializationArgs);
 
             if (isRootObject)
             {
-                tryBuildPropertyWithValueWriteOperation("scene", gameObject.scene, builder);
+                tryBuildPropertyWithValueWriteOperation("scene", gameObject.scene, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("sceneCullingMask", gameObject.sceneCullingMask, builder);
+                buildPropertyWithValueWriteOperation("sceneCullingMask", gameObject.sceneCullingMask, builder, serializationArgs);
             }
 
             builder.AddPropertyName("$transform");
-            buildTransformWriteOperation(transform, builder);
+            buildTransformWriteOperation(transform, builder, serializationArgs);
 
             builder.AddPropertyName("$components");
             builder.AddStartArray();
@@ -1010,7 +1025,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 if (component is Transform)
                     continue;
 
-                buildComponentWriteOperation(component, builder);
+                buildComponentWriteOperation(component, builder, serializationArgs);
             }
 
             builder.AddEndArray();
@@ -1020,7 +1035,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             for (int i = 0; i < transform.childCount; i++)
             {
-                buildGameObjectWriteOperation(transform.GetChild(i), builder);
+                buildGameObjectWriteOperation(transform.GetChild(i), builder, serializationArgs);
             }
 
             builder.AddEndArray();
@@ -1068,31 +1083,31 @@ namespace AddressableDumper.ValueDumper.Serialization
             return false;
         }
 
-        bool buildTransformWriteOperation(Transform value, WriteOperationBuilder builder)
+        bool buildTransformWriteOperation(Transform value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             builder.AddStartObject();
 
             if (value is RectTransform rectTransform)
             {
-                buildPropertyWithValueWriteOperation("rect", rectTransform.rect, builder);
+                buildPropertyWithValueWriteOperation("rect", rectTransform.rect, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("anchorMin", rectTransform.anchorMin, builder);
+                buildPropertyWithValueWriteOperation("anchorMin", rectTransform.anchorMin, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("anchorMax", rectTransform.anchorMax, builder);
+                buildPropertyWithValueWriteOperation("anchorMax", rectTransform.anchorMax, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("anchoredPosition", rectTransform.anchoredPosition, builder);
+                buildPropertyWithValueWriteOperation("anchoredPosition", rectTransform.anchoredPosition, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("sizeDelta", rectTransform.sizeDelta, builder);
+                buildPropertyWithValueWriteOperation("sizeDelta", rectTransform.sizeDelta, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("pivot", rectTransform.pivot, builder);
+                buildPropertyWithValueWriteOperation("pivot", rectTransform.pivot, builder, serializationArgs);
             }
             else
             {
-                buildPropertyWithValueWriteOperation("localPosition", value.localPosition, builder);
+                buildPropertyWithValueWriteOperation("localPosition", value.localPosition, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("localRotation", value.localRotation, builder);
+                buildPropertyWithValueWriteOperation("localRotation", value.localRotation, builder, serializationArgs);
 
-                buildPropertyWithValueWriteOperation("localScale", value.localScale, builder);
+                buildPropertyWithValueWriteOperation("localScale", value.localScale, builder, serializationArgs);
             }
 
             builder.AddEndObject();
@@ -1100,7 +1115,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             return true;
         }
 
-        bool buildComponentWriteOperation(Component value, WriteOperationBuilder builder)
+        bool buildComponentWriteOperation(Component value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             if (!value)
             {
@@ -1112,14 +1127,14 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             Type type = value.GetType();
 
-            buildTypeFieldWriteOperation(type, builder);
+            buildTypeFieldWriteOperation(type, builder, serializationArgs);
 
             if (tryGetComponentIndex(value.gameObject, value, out int componentIndex))
             {
-                buildPropertyWithValueWriteOperation("$component_idx", componentIndex, builder);
+                buildPropertyWithValueWriteOperation("$component_idx", componentIndex, builder, serializationArgs);
             }
 
-            buildSerializedMemberWriteOperations(value, builder, type =>
+            buildSerializedMemberWriteOperations(value, builder, serializationArgs, type =>
             {
                 bool isUnityType = isUnityScriptType(type);
 
@@ -1134,7 +1149,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             return true;
         }
         
-        bool buildGenericUnityObjectWriteOperation(UnityEngine.Object value, WriteOperationBuilder builder)
+        bool buildGenericUnityObjectWriteOperation(UnityEngine.Object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             if (!value)
             {
@@ -1146,9 +1161,9 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             Type type = value.GetType();
 
-            buildTypeFieldWriteOperation(type, builder);
+            buildTypeFieldWriteOperation(type, builder, serializationArgs);
 
-            buildSerializedMemberWriteOperations(value, builder, type =>
+            buildSerializedMemberWriteOperations(value, builder, serializationArgs, type =>
             {
                 bool isUnityType = isUnityScriptType(type);
 
@@ -1187,7 +1202,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             }
         }
 
-        bool buildSerializedMemberWriteOperations(object value, WriteOperationBuilder builder, Func<Type, MemberSerializationContext> baseTypeContextGetter)
+        bool buildSerializedMemberWriteOperations(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs, Func<Type, MemberSerializationContext> baseTypeContextGetter)
         {
             if (baseTypeContextGetter is null)
                 throw new ArgumentNullException(nameof(baseTypeContextGetter));
@@ -1218,6 +1233,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                         continue;
 
                     bool appendValueHashInstead = false;
+
+                    ObjectSerializationArgs memberSerializationArgs = serializationArgs;
 
                     if (baseType == typeof(Renderer))
                     {
@@ -1310,6 +1327,15 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 continue;
                         }
                     }
+                    else if (baseType == typeof(ItemDisplayRuleSet))
+                    {
+                        switch (member.Name)
+                        {
+                            case nameof(ItemDisplayRuleSet.keyAssetRuleGroups):
+                                memberSerializationArgs.MaxCollectionCapacity = int.MaxValue;
+                                break;
+                        }
+                    }
 
                     if (serializationContext.ShouldConsiderUnityScriptType)
                     {
@@ -1396,7 +1422,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                     }
                     else
                     {
-                        if (!tryBuildPropertyWithValueWriteOperation(member.Name, memberValue, builder))
+                        if (!tryBuildPropertyWithValueWriteOperation(member.Name, memberValue, builder, memberSerializationArgs))
                         {
                             Log.Warning($"Failed to determine write operation for serialized {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberType.Name})");
                         }
