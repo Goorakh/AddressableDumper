@@ -65,6 +65,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         public Transform[] AdditionalReferenceRoots { get; set; } = [];
 
+        public bool ExcludeNonDeterministicValues { get; set; } = false;
+
         public ObjectSerializer(JsonWriter writer, object value)
         {
             _writer = writer;
@@ -1248,6 +1250,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                             case nameof(Renderer.worldToLocalMatrix):
                             case nameof(Renderer.localToWorldMatrix):
                                 continue;
+
+                            case nameof(Renderer.bounds) when ExcludeNonDeterministicValues && value is ParticleSystemRenderer:
+                                continue;
                         }
                     }
                     else if (baseType == typeof(Animator))
@@ -1334,6 +1339,20 @@ namespace AddressableDumper.ValueDumper.Serialization
                             case nameof(ItemDisplayRuleSet.keyAssetRuleGroups):
                                 memberSerializationArgs.MaxCollectionCapacity = int.MaxValue;
                                 break;
+                        }
+                    }
+
+                    if (ExcludeNonDeterministicValues)
+                    {
+                        if (baseType == typeof(ParticleSystem))
+                        {
+                            switch (member.Name)
+                            {
+                                case nameof(ParticleSystem.particleCount):
+                                case nameof(ParticleSystem.time):
+                                case nameof(ParticleSystem.randomSeed):
+                                    continue;
+                            }
                         }
                     }
 

@@ -208,7 +208,8 @@ namespace AddressableDumper.ValueDumper
                             ObjectSerializer serializer = new ObjectSerializer(jsonWriter, rootObject)
                             {
                                 SerializingScene = sceneInstance,
-                                AdditionalReferenceRoots = rootTransforms
+                                AdditionalReferenceRoots = rootTransforms,
+                                ExcludeNonDeterministicValues = true
                             };
 
                             serializer.Write();
