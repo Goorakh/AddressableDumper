@@ -1,5 +1,4 @@
 ﻿using AddressableDumper.Utils;
-using RoR2.Navigation;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -8,6 +7,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
@@ -126,6 +126,17 @@ namespace AddressableDumper.ValueDumper.Serialization
                     writeValue(writer, treeInstance.color);
                     writeValue(writer, treeInstance.lightmapColor);
                     writer.Write(treeInstance.prototypeIndex);
+
+                    return;
+                case SphericalHarmonicsL2 sphericalHarmonicsL2:
+
+                    for (int rgb = 0; rgb < 3; rgb++)
+                    {
+                        for (int c = 0; c < 9; c++)
+                        {
+                            writer.Write(sphericalHarmonicsL2[rgb, c]);
+                        }
+                    }
 
                     return;
             }
