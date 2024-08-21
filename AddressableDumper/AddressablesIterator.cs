@@ -220,6 +220,8 @@ namespace AddressableDumper
 
             _allAssetInfos = assetInfos.ToArray();
 
+            _assetInfoLookup = null;
+
             _sceneLocations = sceneLocations.ToArray();
             Array.Sort(_sceneLocations, (a, b) => a.PrimaryKey.CompareTo(b.PrimaryKey));
 
