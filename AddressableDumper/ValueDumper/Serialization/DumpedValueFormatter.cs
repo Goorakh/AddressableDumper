@@ -31,10 +31,6 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return "null";
                 case string str:
                     return str;
-                case IFormattable formattable:
-                    return formattable.ToString(format, BackingFormatProvider);
-                case IConvertible convertible:
-                    return convertible.ToString(BackingFormatProvider);
                 case Vector2 vector2:
                     return $"vec2f({formatSubArg(vector2.x)}, {formatSubArg(vector2.y)})";
                 case Vector2Int vector2Int:
@@ -89,6 +85,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return $"NetworkHash128({networkHash128})";
                 case NetworkSceneId networkSceneId:
                     return $"NetworkSceneId({formatSubArg(networkSceneId.Value)})";
+                case IFormattable formattable:
+                    return formattable.ToString(format, BackingFormatProvider);
+                case IConvertible convertible:
+                    return convertible.ToString(BackingFormatProvider);
                 default:
                     throw new NotImplementedException($"Unhandled argument type '{arg.GetType().Name}'");
             }

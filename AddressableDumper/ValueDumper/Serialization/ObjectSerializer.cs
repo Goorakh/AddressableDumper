@@ -617,7 +617,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                         }
                         case ParticleSystem.CollisionModule collisionModule:
                         {
-                            Transform[] planes = new Transform[collisionModule.maxPlaneCount];
+                            Transform[] planes = new Transform[collisionModule.planeCount];
 
                             for (int i = 0; i < planes.Length; i++)
                             {
@@ -630,7 +630,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                         }
                         case ParticleSystem.TriggerModule triggerModule:
                         {
-                            Component[] colliders = new Component[triggerModule.maxColliderCount];
+                            Component[] colliders = new Component[triggerModule.colliderCount];
 
                             for (int i = 0; i < colliders.Length; i++)
                             {
