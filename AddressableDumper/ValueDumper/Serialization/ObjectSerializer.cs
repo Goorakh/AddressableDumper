@@ -527,6 +527,32 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     return true;
                 }
+                case LocalKeywordSpace localKeywordSpace:
+                {
+                    builder.AddStartObject();
+
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
+
+                    buildPropertyWithValueWriteOperation("keywords", localKeywordSpace.keywords, builder, serializationArgs);
+
+                    builder.AddEndObject();
+
+                    return true;
+                }
+                case RenderBuffer renderBuffer:
+                {
+                    builder.AddStartObject();
+
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
+
+                    buildPropertyWithValueWriteOperation("loadAction", renderBuffer.loadAction, builder, serializationArgs);
+
+                    buildPropertyWithValueWriteOperation("storeAction", renderBuffer.storeAction, builder, serializationArgs);
+
+                    builder.AddEndObject();
+
+                    return true;
+                }
                 case GradientColorKey:
                 case GradientAlphaKey:
                 case SkeletonBone:
@@ -553,9 +579,41 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case Scene:
                 case AnimationCurve:
                 case Keyframe:
+                case ParticleSystem.Burst:
+                case Gradient:
+                case HumanLimit:
+                case SoftJointLimitSpring:
+                case SoftJointLimit:
+                case JointDrive:
+                case RenderTextureDescriptor:
+                case WheelFrictionCurve:
+                case AnimationState:
+                case AnimatorStateInfo:
+                case AnimatorClipInfo:
+                case TreePrototype:
+                case DetailPrototype:
+                case PostProcessBundle:
+                case AnimatorControllerParameter:
+                case LocalKeyword:
+                {
+                    builder.AddStartObject();
+
+                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
+
+                    buildSerializedMemberWriteOperations(value, builder, serializationArgs, t =>
+                    {
+                        return new MemberSerializationContext(MemberTypes.Property,
+                                                              false,
+                                                              false,
+                                                              false);
+                    });
+
+                    builder.AddEndObject();
+
+                    return true;
+                }
                 case ParticleSystem.MainModule:
                 case ParticleSystem.EmissionModule:
-                case ParticleSystem.Burst:
                 case ParticleSystem.ShapeModule:
                 case ParticleSystem.VelocityOverLifetimeModule:
                 case ParticleSystem.LimitVelocityOverLifetimeModule:
@@ -576,20 +634,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case ParticleSystem.LightsModule:
                 case ParticleSystem.TrailModule:
                 case ParticleSystem.CustomDataModule:
-                case Gradient:
-                case HumanLimit:
-                case SoftJointLimitSpring:
-                case SoftJointLimit:
-                case JointDrive:
-                case RenderTextureDescriptor:
-                case WheelFrictionCurve:
-                case AnimationState:
-                case AnimatorStateInfo:
-                case AnimatorClipInfo:
-                case TreePrototype:
-                case DetailPrototype:
-                case PostProcessBundle:
-                case AnimatorControllerParameter:
+                case ParticleSystem.LifetimeByEmitterSpeedModule:
                 {
                     builder.AddStartObject();
 
@@ -1472,6 +1517,15 @@ namespace AddressableDumper.ValueDumper.Serialization
                             case nameof(ItemDisplayRuleSet.keyAssetRuleGroups):
                                 memberSerializationArgs.MaxCollectionCapacity = int.MaxValue;
                                 break;
+                        }
+                    }
+                    else if (baseType == typeof(WheelCollider))
+                    {
+                        switch (member.Name)
+                        {
+                            // Causes a crash when accessed for some reason, not a very important value for RoR2 specificially so I don't care to look into it
+                            case nameof(WheelCollider.suspensionExpansionLimited):
+                                continue;
                         }
                     }
 
