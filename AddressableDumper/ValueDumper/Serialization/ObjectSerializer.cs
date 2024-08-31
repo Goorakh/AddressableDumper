@@ -640,132 +640,167 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
 
-                    buildSerializedMemberWriteOperations(value, builder, serializationArgs, t =>
+                    bool enabled = value switch
                     {
-                        return new MemberSerializationContext(MemberTypes.Property,
-                                                              false,
-                                                              false,
-                                                              false);
-                    });
+                        ParticleSystem.MainModule => true,
+                        ParticleSystem.EmissionModule m => m.enabled,
+                        ParticleSystem.ShapeModule m => m.enabled,
+                        ParticleSystem.VelocityOverLifetimeModule m => m.enabled,
+                        ParticleSystem.LimitVelocityOverLifetimeModule m => m.enabled,
+                        ParticleSystem.InheritVelocityModule m => m.enabled,
+                        ParticleSystem.ForceOverLifetimeModule m => m.enabled,
+                        ParticleSystem.ColorOverLifetimeModule m => m.enabled,
+                        ParticleSystem.ColorBySpeedModule m => m.enabled,
+                        ParticleSystem.SizeOverLifetimeModule m => m.enabled,
+                        ParticleSystem.SizeBySpeedModule m => m.enabled,
+                        ParticleSystem.RotationOverLifetimeModule m => m.enabled,
+                        ParticleSystem.RotationBySpeedModule m => m.enabled,
+                        ParticleSystem.ExternalForcesModule m => m.enabled,
+                        ParticleSystem.NoiseModule m => m.enabled,
+                        ParticleSystem.CollisionModule m => m.enabled,
+                        ParticleSystem.TriggerModule m => m.enabled,
+                        ParticleSystem.SubEmittersModule m => m.enabled,
+                        ParticleSystem.TextureSheetAnimationModule m => m.enabled,
+                        ParticleSystem.LightsModule m => m.enabled,
+                        ParticleSystem.TrailModule m => m.enabled,
+                        ParticleSystem.CustomDataModule m => m.enabled,
+                        ParticleSystem.LifetimeByEmitterSpeedModule m => m.enabled,
+                        _ => throw new NotImplementedException($"{value.GetType().FullName} is not implemented")
+                    };
 
-                    switch (value)
+                    if (enabled)
                     {
-                        case ParticleSystem.EmissionModule emissionModule:
+                        buildSerializedMemberWriteOperations(value, builder, serializationArgs, t =>
                         {
-                            ParticleSystem.Burst[] bursts = new ParticleSystem.Burst[emissionModule.burstCount];
-                            int burstCount = emissionModule.GetBursts(bursts);
-                            Array.Resize(ref bursts, burstCount);
+                            return new MemberSerializationContext(MemberTypes.Property,
+                                                                  false,
+                                                                  false,
+                                                                  false);
+                        });
 
-                            buildPropertyWithValueWriteOperation("bursts", bursts, builder, serializationArgs);
-
-                            break;
-                        }
-                        case ParticleSystem.CollisionModule collisionModule:
+                        switch (value)
                         {
-                            Transform[] planes = new Transform[collisionModule.planeCount];
-
-                            for (int i = 0; i < planes.Length; i++)
+                            case ParticleSystem.EmissionModule emissionModule:
                             {
-                                planes[i] = collisionModule.GetPlane(i);
+                                ParticleSystem.Burst[] bursts = new ParticleSystem.Burst[emissionModule.burstCount];
+                                int burstCount = emissionModule.GetBursts(bursts);
+                                Array.Resize(ref bursts, burstCount);
+
+                                buildPropertyWithValueWriteOperation("bursts", bursts, builder, serializationArgs);
+
+                                break;
                             }
-
-                            buildPropertyWithValueWriteOperation("planes", planes, builder, serializationArgs);
-
-                            break;
-                        }
-                        case ParticleSystem.TriggerModule triggerModule:
-                        {
-                            Component[] colliders = new Component[triggerModule.colliderCount];
-
-                            for (int i = 0; i < colliders.Length; i++)
+                            case ParticleSystem.CollisionModule collisionModule:
                             {
-                                colliders[i] = triggerModule.GetCollider(i);
+                                Transform[] planes = new Transform[collisionModule.planeCount];
+
+                                for (int i = 0; i < planes.Length; i++)
+                                {
+                                    planes[i] = collisionModule.GetPlane(i);
+                                }
+
+                                buildPropertyWithValueWriteOperation("planes", planes, builder, serializationArgs);
+
+                                break;
                             }
-
-                            buildPropertyWithValueWriteOperation("colliders", colliders, builder, serializationArgs);
-
-                            break;
-                        }
-                        case ParticleSystem.SubEmittersModule subEmitters:
-                        {
-                            builder.AddPropertyName("emitters");
-                            builder.AddStartArray();
-
-                            for (int i = 0; i < subEmitters.subEmittersCount; i++)
+                            case ParticleSystem.TriggerModule triggerModule:
                             {
-                                builder.AddStartObject();
+                                Component[] colliders = new Component[triggerModule.colliderCount];
 
-                                ParticleSystem emitterParticleSystem = subEmitters.GetSubEmitterSystem(i);
-                                buildPropertyWithValueWriteOperation("emitterParticleSystem", emitterParticleSystem, builder, serializationArgs);
+                                for (int i = 0; i < colliders.Length; i++)
+                                {
+                                    colliders[i] = triggerModule.GetCollider(i);
+                                }
 
-                                ParticleSystemSubEmitterType emitterType = subEmitters.GetSubEmitterType(i);
-                                buildPropertyWithValueWriteOperation("emitterType", emitterType, builder, serializationArgs);
+                                buildPropertyWithValueWriteOperation("colliders", colliders, builder, serializationArgs);
 
-                                ParticleSystemSubEmitterProperties emitterProperties = subEmitters.GetSubEmitterProperties(i);
-                                buildPropertyWithValueWriteOperation("emitterProperties", emitterProperties, builder, serializationArgs);
-
-                                float emitterProbability = subEmitters.GetSubEmitterEmitProbability(i);
-                                buildPropertyWithValueWriteOperation("emitterProbability", emitterProbability, builder, serializationArgs);
-
-                                builder.AddEndObject();
+                                break;
                             }
-
-                            builder.AddEndArray();
-
-                            break;
-                        }
-                        case ParticleSystem.TextureSheetAnimationModule textureSheetAnimationModule:
-                        {
-                            builder.AddPropertyName("sprites");
-                            builder.AddStartArray();
-
-                            for (int i = 0; i < textureSheetAnimationModule.spriteCount; i++)
+                            case ParticleSystem.SubEmittersModule subEmitters:
                             {
-                                Sprite sprite = textureSheetAnimationModule.GetSprite(i);
-                                buildWriteOperation(sprite, builder, serializationArgs);
-                            }
-
-                            builder.AddEndArray();
-
-                            break;
-                        }
-                        case ParticleSystem.CustomDataModule customDataModule:
-                        {
-                            builder.AddPropertyName("streams");
-                            builder.AddStartArray();
-
-                            for (ParticleSystemCustomData stream = ParticleSystemCustomData.Custom1; stream <= ParticleSystemCustomData.Custom2; stream++)
-                            {
-                                builder.AddStartObject();
-
-                                buildPropertyWithValueWriteOperation("stream", stream, builder, serializationArgs);
-
-                                ParticleSystemCustomDataMode mode = customDataModule.GetMode(stream);
-                                buildPropertyWithValueWriteOperation("mode", mode, builder, serializationArgs);
-
-                                int vectorComponentCount = customDataModule.GetVectorComponentCount(stream);
-                                buildPropertyWithValueWriteOperation("vectorComponentCount", vectorComponentCount, builder, serializationArgs);
-
-                                builder.AddPropertyName("vectorComponents");
+                                builder.AddPropertyName("emitters");
                                 builder.AddStartArray();
 
-                                for (int i = 0; i < vectorComponentCount; i++)
+                                for (int i = 0; i < subEmitters.subEmittersCount; i++)
                                 {
-                                    buildWriteOperation(customDataModule.GetVector(stream, i), builder, serializationArgs);
+                                    builder.AddStartObject();
+
+                                    ParticleSystem emitterParticleSystem = subEmitters.GetSubEmitterSystem(i);
+                                    buildPropertyWithValueWriteOperation("emitterParticleSystem", emitterParticleSystem, builder, serializationArgs);
+
+                                    ParticleSystemSubEmitterType emitterType = subEmitters.GetSubEmitterType(i);
+                                    buildPropertyWithValueWriteOperation("emitterType", emitterType, builder, serializationArgs);
+
+                                    ParticleSystemSubEmitterProperties emitterProperties = subEmitters.GetSubEmitterProperties(i);
+                                    buildPropertyWithValueWriteOperation("emitterProperties", emitterProperties, builder, serializationArgs);
+
+                                    float emitterProbability = subEmitters.GetSubEmitterEmitProbability(i);
+                                    buildPropertyWithValueWriteOperation("emitterProbability", emitterProbability, builder, serializationArgs);
+
+                                    builder.AddEndObject();
                                 }
 
                                 builder.AddEndArray();
 
-                                ParticleSystem.MinMaxGradient color = customDataModule.GetColor(stream);
-                                buildPropertyWithValueWriteOperation("color", color, builder, serializationArgs);
-
-                                builder.AddEndObject();
+                                break;
                             }
+                            case ParticleSystem.TextureSheetAnimationModule textureSheetAnimationModule:
+                            {
+                                builder.AddPropertyName("sprites");
+                                builder.AddStartArray();
 
-                            builder.AddEndArray();
+                                for (int i = 0; i < textureSheetAnimationModule.spriteCount; i++)
+                                {
+                                    Sprite sprite = textureSheetAnimationModule.GetSprite(i);
+                                    buildWriteOperation(sprite, builder, serializationArgs);
+                                }
 
-                            break;
+                                builder.AddEndArray();
+
+                                break;
+                            }
+                            case ParticleSystem.CustomDataModule customDataModule:
+                            {
+                                builder.AddPropertyName("streams");
+                                builder.AddStartArray();
+
+                                for (ParticleSystemCustomData stream = ParticleSystemCustomData.Custom1; stream <= ParticleSystemCustomData.Custom2; stream++)
+                                {
+                                    builder.AddStartObject();
+
+                                    buildPropertyWithValueWriteOperation("stream", stream, builder, serializationArgs);
+
+                                    ParticleSystemCustomDataMode mode = customDataModule.GetMode(stream);
+                                    buildPropertyWithValueWriteOperation("mode", mode, builder, serializationArgs);
+
+                                    int vectorComponentCount = customDataModule.GetVectorComponentCount(stream);
+                                    buildPropertyWithValueWriteOperation("vectorComponentCount", vectorComponentCount, builder, serializationArgs);
+
+                                    builder.AddPropertyName("vectorComponents");
+                                    builder.AddStartArray();
+
+                                    for (int i = 0; i < vectorComponentCount; i++)
+                                    {
+                                        buildWriteOperation(customDataModule.GetVector(stream, i), builder, serializationArgs);
+                                    }
+
+                                    builder.AddEndArray();
+
+                                    ParticleSystem.MinMaxGradient color = customDataModule.GetColor(stream);
+                                    buildPropertyWithValueWriteOperation("color", color, builder, serializationArgs);
+
+                                    builder.AddEndObject();
+                                }
+
+                                builder.AddEndArray();
+
+                                break;
+                            }
                         }
+                    }
+                    else
+                    {
+                        buildPropertyWithValueWriteOperation("enabled", enabled, builder, serializationArgs);
                     }
 
                     builder.AddEndObject();
