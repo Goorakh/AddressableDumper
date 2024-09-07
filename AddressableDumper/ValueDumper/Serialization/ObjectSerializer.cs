@@ -1466,9 +1466,13 @@ namespace AddressableDumper.ValueDumper.Serialization
                             // Not necessary
                             case nameof(Renderer.worldToLocalMatrix):
                             case nameof(Renderer.localToWorldMatrix):
-                                continue;
 
-                            case nameof(Renderer.bounds) when ExcludeNonDeterministicValues && value is ParticleSystemRenderer:
+                            // Bounds are global, which is inconsistent,
+                            // will change if parent moves but this object didn't actually change
+                            case nameof(Renderer.bounds):
+
+                            // Particles bounds are inconsistent between dumps
+                            case nameof(Renderer.localBounds) when value is ParticleSystemRenderer:
                                 continue;
                         }
                     }
@@ -1567,18 +1571,14 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 continue;
                         }
                     }
-
-                    if (ExcludeNonDeterministicValues)
+                    else if (baseType == typeof(ParticleSystem))
                     {
-                        if (baseType == typeof(ParticleSystem))
+                        switch (member.Name)
                         {
-                            switch (member.Name)
-                            {
-                                case nameof(ParticleSystem.particleCount):
-                                case nameof(ParticleSystem.time):
-                                case nameof(ParticleSystem.randomSeed):
-                                    continue;
-                            }
+                            case nameof(ParticleSystem.particleCount):
+                            case nameof(ParticleSystem.time):
+                            case nameof(ParticleSystem.randomSeed):
+                                continue;
                         }
                     }
 
