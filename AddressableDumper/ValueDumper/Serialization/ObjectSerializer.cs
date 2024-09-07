@@ -360,6 +360,23 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         bool buildCustomFormattedWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
+            switch (value)
+            {
+                case Matrix4x4 matrix4x4:
+                {
+                    builder.AddStartObject();
+
+                    for (int i = 0; i < 4; i++)
+                    {
+                        buildPropertyWithValueWriteOperation($"row{i}", matrix4x4.GetRow(i), builder, serializationArgs);
+                    }
+
+                    builder.AddEndObject();
+
+                    return true;
+                }
+            }
+
             string formatString = serializationArgs.CustomFormat;
             if (string.IsNullOrWhiteSpace(formatString))
             {
@@ -399,19 +416,6 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             switch (value)
             {
-                case Matrix4x4 matrix4x4:
-                {
-                    builder.AddStartObject();
-
-                    for (int i = 0; i < 4; i++)
-                    {
-                        buildPropertyWithValueWriteOperation($"row{i}", matrix4x4.GetRow(i), builder, serializationArgs);
-                    }
-
-                    builder.AddEndObject();
-
-                    return true;
-                }
                 case ParticleSystem.MinMaxCurve minMaxCurve:
                 {
                     builder.AddStartObject();
