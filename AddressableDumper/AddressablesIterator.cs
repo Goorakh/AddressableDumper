@@ -84,7 +84,7 @@ namespace AddressableDumper
 
             if (refresh)
             {
-                refreshCache();
+                Log.Warning("Cache refresh required");
             }
             else
             {
