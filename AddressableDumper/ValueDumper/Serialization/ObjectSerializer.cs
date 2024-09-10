@@ -1471,8 +1471,8 @@ namespace AddressableDumper.ValueDumper.Serialization
                             // will change if parent moves but this object didn't actually change
                             case nameof(Renderer.bounds):
 
-                            // Particles bounds are inconsistent between dumps
-                            case nameof(Renderer.localBounds) when value is ParticleSystemRenderer:
+                            // Some bounds are inconsistent between dumps
+                            case nameof(Renderer.localBounds) when value is ParticleSystemRenderer or LineRenderer:
                                 continue;
                         }
                     }
@@ -1578,6 +1578,23 @@ namespace AddressableDumper.ValueDumper.Serialization
                             case nameof(ParticleSystem.particleCount):
                             case nameof(ParticleSystem.time):
                             case nameof(ParticleSystem.randomSeed):
+                                continue;
+                        }
+                    }
+                    else if (baseType == typeof(AkEvent))
+                    {
+                        switch (member.Name)
+                        {
+                            case nameof(AkEvent.playingId):
+                                continue;
+                        }
+                    }
+                    else if (baseType == typeof(Light))
+                    {
+                        Light light = (Light)value;
+                        switch (member.Name)
+                        {
+                            case nameof(Light.boundingSphereOverride) when !light.useBoundingSphereOverride:
                                 continue;
                         }
                     }
