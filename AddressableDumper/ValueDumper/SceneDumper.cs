@@ -46,23 +46,16 @@ namespace AddressableDumper.ValueDumper
             c.Emit(OpCodes.Ret);
         }
 
+        static void preventDontDestroyOnLoad(UnityEngine.Object target)
+        {
+        }
+
         class ScenesDumperOperation : IDisposable
         {
             IEnumerator<SceneInfo> _sceneInfoIterator;
 
             ILHook _changeSceneHook;
-
-            public void Dispose()
-            {
-                SceneManager.activeSceneChanged -= SceneManager_activeSceneChanged;
-
-                On.RoR2.RoachController.Awake -= RoachControllerPreventSpawn;
-                _changeSceneHook?.Dispose();
-                _changeSceneHook = null;
-
-                _sceneInfoIterator?.Dispose();
-                _sceneInfoIterator = null;
-            }
+            NativeDetour _setDontDestroyOnLoadHook;
 
             public void Start()
             {
@@ -74,13 +67,32 @@ namespace AddressableDumper.ValueDumper
                 SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
 
                 On.RoR2.RoachController.Awake += RoachControllerPreventSpawn;
+
                 _changeSceneHook = new ILHook(SymbolExtensions.GetMethodInfo<NetworkManager>(_ => _.ServerChangeScene(default)), preventSceneLoad);
+
+                _setDontDestroyOnLoadHook = new NativeDetour(SymbolExtensions.GetMethodInfo(() => GameObject.DontDestroyOnLoad(default)), SymbolExtensions.GetMethodInfo(() => preventDontDestroyOnLoad(default)));
 
                 _sceneInfoIterator = AddressablesIterator.GetSceneResourceLocations()
                                                          .Select(location => new SceneInfo(location))
                                                          .GetEnumerator();
 
                 tryMoveToNextScene();
+            }
+
+            public void Dispose()
+            {
+                SceneManager.activeSceneChanged -= SceneManager_activeSceneChanged;
+
+                On.RoR2.RoachController.Awake -= RoachControllerPreventSpawn;
+
+                _changeSceneHook?.Dispose();
+                _changeSceneHook = null;
+
+                _setDontDestroyOnLoadHook?.Dispose();
+                _setDontDestroyOnLoadHook = null;
+
+                _sceneInfoIterator?.Dispose();
+                _sceneInfoIterator = null;
             }
 
             void SceneManager_activeSceneChanged(Scene prevScene, Scene newScene)
