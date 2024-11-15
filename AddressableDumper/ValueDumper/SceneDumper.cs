@@ -1,16 +1,20 @@
 ﻿using AddressableDumper.Utils.Extensions;
 using AddressableDumper.ValueDumper.Serialization;
 using HarmonyLib;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using MonoMod.RuntimeDetour;
+using MonoMod.Utils;
 using Newtonsoft.Json;
 using RoR2;
 using RoR2.Networking;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -28,20 +32,48 @@ namespace AddressableDumper.ValueDumper
         [ConCommand(commandName = "dump_scenes")]
         static void CCDumpScenes(ConCommandArgs args)
         {
-            if (_currentScenesDump != null)
-                return;
-
-            _currentScenesDump = new ScenesDumperOperation();
-            _currentScenesDump.Start();
+            if (_currentScenesDump == null || _currentScenesDump.IsDisposed)
+            {
+                _currentScenesDump = new ScenesDumperOperation();
+                _currentScenesDump.Start();
+            }
         }
 
-        static void RoachControllerPreventSpawn(On.RoR2.RoachController.orig_Awake orig, RoachController self)
-        {
-        }
-
-        static void preventSceneLoad(ILContext il)
+        static void preventExecution(ILContext il)
         {
             ILCursor c = new ILCursor(il);
+
+            static IEnumerable getDefaultValueEnumerable()
+            {
+                return Enumerable.Empty<object>();
+            }
+
+            static IEnumerator getDefaultValueEnumerator()
+            {
+                return getDefaultValueEnumerable().GetEnumerator();
+            }
+
+            TypeReference returnType = il.Method.ReturnType;
+
+            Delegate getDefaultValueMethod = null;
+            if (returnType.Is(typeof(IEnumerable)))
+            {
+                getDefaultValueMethod = getDefaultValueEnumerable;
+            }
+            else if (returnType.Is(typeof(IEnumerator)))
+            {
+                getDefaultValueMethod = getDefaultValueEnumerator;
+            }
+            else if (!returnType.Is(typeof(void)))
+            {
+                Log.Error($"Unhandled return type {returnType.FullName}");
+                c.Emit(OpCodes.Ldnull);
+            }
+
+            if (getDefaultValueMethod != null)
+            {
+                c.EmitDelegate(getDefaultValueMethod);
+            }
 
             c.Emit(OpCodes.Ret);
         }
@@ -54,8 +86,9 @@ namespace AddressableDumper.ValueDumper
         {
             IEnumerator<SceneInfo> _sceneInfoIterator;
 
-            ILHook _changeSceneHook;
-            NativeDetour _setDontDestroyOnLoadHook;
+            readonly List<IDetour> _temporaryDetours = [];
+
+            public bool IsDisposed { get; private set; }
 
             public void Start()
             {
@@ -66,11 +99,35 @@ namespace AddressableDumper.ValueDumper
 
                 SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
 
-                On.RoR2.RoachController.Awake += RoachControllerPreventSpawn;
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    foreach (Type type in assembly.GetTypes())
+                    {
+                        if (type.IsGenericType)
+                            continue;
 
-                _changeSceneHook = new ILHook(SymbolExtensions.GetMethodInfo<NetworkManager>(_ => _.ServerChangeScene(default)), preventSceneLoad);
+                        if (typeof(MonoBehaviour).IsAssignableFrom(type))
+                        {
+                            const BindingFlags FLAGS = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
-                _setDontDestroyOnLoadHook = new NativeDetour(SymbolExtensions.GetMethodInfo(() => GameObject.DontDestroyOnLoad(default)), SymbolExtensions.GetMethodInfo(() => preventDontDestroyOnLoad(default)));
+                            MethodInfo awakeMethod = type.GetMethod("Awake", FLAGS);
+                            if (awakeMethod != null)
+                            {
+                                _temporaryDetours.Add(new ILHook(awakeMethod, preventExecution));
+                            }
+
+                            MethodInfo onEnableMethod = type.GetMethod("OnEnable", FLAGS);
+                            if (onEnableMethod != null)
+                            {
+                                _temporaryDetours.Add(new ILHook(onEnableMethod, preventExecution));
+                            }
+                        }
+                    }
+                }
+
+                _temporaryDetours.Add(new ILHook(SymbolExtensions.GetMethodInfo<NetworkManager>(_ => _.ServerChangeScene(default)), preventExecution));
+
+                _temporaryDetours.Add(new NativeDetour(SymbolExtensions.GetMethodInfo(() => GameObject.DontDestroyOnLoad(default)), SymbolExtensions.GetMethodInfo(() => preventDontDestroyOnLoad(default))));
 
                 _sceneInfoIterator = AddressablesIterator.GetSceneResourceLocations()
                                                          .Select(location => new SceneInfo(location))
@@ -81,28 +138,35 @@ namespace AddressableDumper.ValueDumper
 
             public void Dispose()
             {
+                if (IsDisposed)
+                    return;
+
+                IsDisposed = true;
+
                 SceneManager.activeSceneChanged -= SceneManager_activeSceneChanged;
 
-                On.RoR2.RoachController.Awake -= RoachControllerPreventSpawn;
+                foreach (IDetour detour in _temporaryDetours)
+                {
+                    detour?.Dispose();
+                }
 
-                _changeSceneHook?.Dispose();
-                _changeSceneHook = null;
-
-                _setDontDestroyOnLoadHook?.Dispose();
-                _setDontDestroyOnLoadHook = null;
-
-                _sceneInfoIterator?.Dispose();
-                _sceneInfoIterator = null;
+                _temporaryDetours.Clear();
             }
 
             void SceneManager_activeSceneChanged(Scene prevScene, Scene newScene)
             {
+                if (IsDisposed)
+                    return;
+
                 _sceneInfoIterator.Current.DumpToFile(newScene);
                 tryMoveToNextScene();
             }
 
             void tryMoveToNextScene()
             {
+                if (IsDisposed)
+                    return;
+
                 if (_sceneInfoIterator.MoveNext())
                 {
                     new NetworkManagerSystem.AddressablesChangeSceneAsyncOperation(_sceneInfoIterator.Current.ResourceLocation.PrimaryKey, LoadSceneMode.Single, true);
