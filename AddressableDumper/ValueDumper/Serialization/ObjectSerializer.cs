@@ -1551,6 +1551,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                             //        Doesn't feel *super* important of a value, so for now just exclude it.
                             case nameof(Canvas.renderingDisplaySize):
                                 continue;
+
+                            case nameof(Canvas.renderOrder) when ExcludeNonDeterministicValues:
+                                continue;
                         }
                     }
                     else if (baseType == typeof(ItemDisplayRuleSet))
