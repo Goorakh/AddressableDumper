@@ -1601,6 +1601,16 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 continue;
                         }
                     }
+                    else if (baseType == typeof(Terrain))
+                    {
+                        switch (member.Name)
+                        {
+                            // https://docs.unity3d.com/2021.3/Documentation/ScriptReference/Terrain-keepUnusedRenderingResources.html
+                            // The value is not serialized with Terrain component.
+                            case nameof(Terrain.keepUnusedRenderingResources):
+                                continue;
+                        }
+                    }
 
                     if (serializationContext.ShouldConsiderUnityScriptType)
                     {
