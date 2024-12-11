@@ -15,11 +15,11 @@
     <DebugType>portable</DebugType>
   </PropertyGroup>
 
-	<PropertyGroup>
-		<BuildDir>$(SolutionDir)build/</BuildDir>
-		<TSPackageDir>$(BuildDir)/package/</TSPackageDir>
-		<TSPackagePluginDir>$(TSPackageDir)/plugins/$(SolutionName)/</TSPackagePluginDir>
-	</PropertyGroup>
+  <PropertyGroup>
+	<BuildDir>$(SolutionDir)build/</BuildDir>
+	<TSPackageDir>$(BuildDir)/package/</TSPackageDir>
+	<TSPackagePluginDir>$(TSPackageDir)/plugins/$(SolutionName)/</TSPackagePluginDir>
+  </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="libs\**" />
@@ -33,9 +33,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="BepInEx.Core" Version="5.4.21" />
-    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.3.1.275-r.0" />
+    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.3.5-r.2" />
     <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" />
-    <PackageReference Include="MMHOOK.RoR2" Version="2024.8.28">
+    <PackageReference Include="MMHOOK.RoR2" Version="2024.11.4">
       <NoWarn>NU1701</NoWarn>
     </PackageReference>
   </ItemGroup>
@@ -89,24 +89,24 @@
     </Reference>
   </ItemGroup>
 
-	<Target Name="BuildTSPackage" AfterTargets="Build">
-		<MakeDir Directories="$(TSPackageDir);$(TSPackagePluginDir)" />
-		<Copy SourceFiles="$(SolutionDir)manifest.json;$(SolutionDir)README.md;$(SolutionDir)CHANGELOG.md" DestinationFolder="$(TSPackageDir)" />
+  <Target Name="BuildTSPackage" AfterTargets="Build">
+	<MakeDir Directories="$(TSPackageDir);$(TSPackagePluginDir)" />
+	<Copy SourceFiles="$(SolutionDir)manifest.json;$(SolutionDir)README.md;$(SolutionDir)CHANGELOG.md" DestinationFolder="$(TSPackageDir)" />
 
-		<Copy SourceFiles="$(BuildDir)icon.png" DestinationFolder="$(TSPackageDir)" ContinueOnError="true" />
+	<Copy SourceFiles="$(BuildDir)icon.png" DestinationFolder="$(TSPackageDir)" ContinueOnError="true" />
 
-		<ItemGroup>
-			<LangFiles Include="$(SolutionDir)lang/**/*.*" />
-		</ItemGroup>
+	<ItemGroup>
+		<LangFiles Include="$(SolutionDir)lang/**/*.*" />
+	</ItemGroup>
 
-		<Copy SourceFiles="@(LangFiles)" DestinationFolder="$(TSPackagePluginDir)/lang/%(RecursiveDir)" />
+	<Copy SourceFiles="@(LangFiles)" DestinationFolder="$(TSPackagePluginDir)/lang/%(RecursiveDir)" />
 
-		<Copy SourceFiles="$(OutDir)/$(AssemblyName).dll" DestinationFolder="$(TSPackagePluginDir)" />
+	<Copy SourceFiles="$(OutDir)/$(AssemblyName).dll" DestinationFolder="$(TSPackagePluginDir)" />
 
-		<Copy SourceFiles="$(OutDir)/$(AssemblyName).pdb" DestinationFolder="$(TSPackagePluginDir)" Condition="'$(Configuration)'=='Debug'" />
-		<Delete Files="$(TSPackagePluginDir)/$(AssemblyName).pdb" Condition="'$(Configuration)'=='Release'" />
+	<Copy SourceFiles="$(OutDir)/$(AssemblyName).pdb" DestinationFolder="$(TSPackagePluginDir)" Condition="'$(Configuration)'=='Debug'" />
+	<Delete Files="$(TSPackagePluginDir)/$(AssemblyName).pdb" Condition="'$(Configuration)'=='Release'" />
 
-		<ZipDirectory SourceDirectory="$(TSPackageDir)" DestinationFile="$(BuildDir)/$(SolutionName).zip" Overwrite="true" />
-	</Target>
+	<ZipDirectory SourceDirectory="$(TSPackageDir)" DestinationFile="$(BuildDir)/$(SolutionName).zip" Overwrite="true" />
+  </Target>
 
 </Project>
