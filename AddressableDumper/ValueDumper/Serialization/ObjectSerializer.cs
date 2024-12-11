@@ -1612,6 +1612,12 @@ namespace AddressableDumper.ValueDumper.Serialization
                         }
                     }
 
+                    // TODO: Catalog indices?
+                    // CharacterBody.bodyIndex
+                    // ProjectileController.catalogIndex
+                    // EffectComponent.effectIndex
+                    // CharacterMaster._masterIndex
+
                     if (serializationContext.ShouldConsiderUnityScriptType)
                     {
                         // Use *only* shared versions of properties where available, otherwise new instances are created
