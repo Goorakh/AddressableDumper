@@ -2,7 +2,10 @@
 using AddressableDumper.Utils.Extensions;
 using Newtonsoft.Json;
 using RoR2;
+using RoR2.Audio;
+using RoR2.EntitlementManagement;
 using RoR2.Navigation;
+using RoR2.Projectile;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -1045,10 +1048,17 @@ namespace AddressableDumper.ValueDumper.Serialization
                     }
                 }
 
-                if (tryGetAssetRefString(obj, out string assetRefString))
+                bool isSerializingRuntimeAnimatorController = Array.FindLastIndex(serializingSteps, s => s.Value is RuntimeAnimatorController) != -1;
+
+                bool isSerializingAnimatorControllerClip = isSerializingRuntimeAnimatorController && obj is AnimationClip;
+
+                if (!isSerializingAnimatorControllerClip)
                 {
-                    builder.AddValueRaw(assetRefString);
-                    return true;
+                    if (tryGetAssetRefString(obj, out string assetRefString))
+                    {
+                        builder.AddValueRaw(assetRefString);
+                        return true;
+                    }
                 }
             }
 
@@ -1449,7 +1459,16 @@ namespace AddressableDumper.ValueDumper.Serialization
                 foreach (MemberInfo member in members)
                 {
                     if (!serializationContext.IncludeObsolete && member.GetCustomAttribute(typeof(ObsoleteAttribute)) != null)
-                        continue;
+                    {
+#pragma warning disable CS0618 // Type or member is obsolete
+                        bool isWhitelistedDeprecated = member.DeclaringType == typeof(ItemDef) && member.Name == nameof(ItemDef.deprecatedTier);
+#pragma warning restore CS0618 // Type or member is obsolete
+
+                        if (!isWhitelistedDeprecated)
+                        {
+                            continue;
+                        }
+                    }
 
                     bool appendValueHashInstead = false;
 
@@ -1611,12 +1630,57 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 continue;
                         }
                     }
+                    else if (baseType == typeof(ProjectileController))
+                    {
+                        switch (member.Name)
+                        {
+                            case nameof(ProjectileController.catalogIndex):
+                                continue;
+                        }
+                    }
 
-                    // TODO: Catalog indices?
-                    // CharacterBody.bodyIndex
-                    // ProjectileController.catalogIndex
-                    // EffectComponent.effectIndex
-                    // CharacterMaster._masterIndex
+                    Type memberValueType = null;
+                    switch (member)
+                    {
+                        case FieldInfo field:
+                            memberValueType = field.FieldType;
+                            break;
+                        case PropertyInfo property:
+                            memberValueType = property.PropertyType;
+                            break;
+                    }
+
+                    if (memberValueType != null)
+                    {
+                        // Exclude catalog indices, since they are assigned at runtime it doesn't make sense for a dump
+                        if (memberValueType == typeof(AchievementIndex) ||
+                            memberValueType == typeof(ArtifactIndex) ||
+                            memberValueType == typeof(BodyIndex) ||
+                            memberValueType == typeof(BuffIndex) ||
+                            memberValueType == typeof(EffectIndex) ||
+                            memberValueType == typeof(EntityStateIndex) ||
+                            memberValueType == typeof(EquipmentIndex) ||
+                            memberValueType == typeof(GameEndingIndex) ||
+                            memberValueType == typeof(GameModeIndex) ||
+                            memberValueType == typeof(ItemIndex) ||
+                            memberValueType == typeof(MiscPickupIndex) ||
+                            memberValueType == typeof(MusicTrackIndex) ||
+                            memberValueType == typeof(PickupIndex) ||
+                            memberValueType == typeof(SceneIndex) ||
+                            memberValueType == typeof(ServerAchievementIndex) ||
+                            memberValueType == typeof(SkinIndex) ||
+                            memberValueType == typeof(SurfaceDefIndex) ||
+                            memberValueType == typeof(SurvivorIndex) ||
+                            memberValueType == typeof(UnlockableIndex) ||
+                            memberValueType == typeof(BlockMapCellIndex) ||
+                            memberValueType == typeof(EntitlementIndex) ||
+                            memberValueType == typeof(MasterCatalog.MasterIndex) ||
+                            memberValueType == typeof(MasterCatalog.NetworkMasterIndex) ||
+                            memberValueType == typeof(NetworkSoundEventIndex))
+                        {
+                            continue;
+                        }
+                    }
 
                     if (serializationContext.ShouldConsiderUnityScriptType)
                     {
@@ -1631,12 +1695,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                         }
                     }
 
-                    Type memberType;
                     object memberValue;
                     switch (member)
                     {
                         case FieldInfo field:
-                            memberType = field.FieldType;
 
                             try
                             {
@@ -1654,7 +1716,6 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                             break;
                         case PropertyInfo property:
-                            memberType = property.PropertyType;
 
                             try
                             {
@@ -1675,9 +1736,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                             throw new NotImplementedException($"Member type {member.MemberType} ({member}) is not implemented");
                     }
 
-                    if (memberType.IsArray)
+                    if (memberValueType.IsArray)
                     {
-                        Type elementType = memberType.GetElementType();
+                        Type elementType = memberValueType.GetElementType();
                         if (elementType == typeof(NodeGraph.Node) || elementType == typeof(NodeGraph.Link))
                         {
                             appendValueHashInstead = true;
@@ -1688,7 +1749,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                             {
                                 if (array.Length > 200)
                                 {
-                                    Log.Warning($"Large array with {array.Length} elements at {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberType.Name}), consider allowing hash?");
+                                    Log.Warning($"Large array with {array.Length} elements at {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberValueType.Name}), consider allowing hash?");
                                 }
                             }
                         }
@@ -1705,7 +1766,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                     {
                         if (!tryBuildPropertyWithValueWriteOperation(member.Name, memberValue, builder, memberSerializationArgs))
                         {
-                            Log.Warning($"Failed to determine write operation for serialized {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberType.Name})");
+                            Log.Warning($"Failed to determine write operation for serialized {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberValueType.Name})");
                         }
                     }
                 }
