@@ -1638,6 +1638,14 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 continue;
                         }
                     }
+                    else if (baseType == typeof(CharacterMaster))
+                    {
+                        switch (member.Name)
+                        {
+                            case nameof(CharacterMaster._masterIndex):
+                                continue;
+                        }
+                    }
 
                     Type memberValueType = null;
                     switch (member)
