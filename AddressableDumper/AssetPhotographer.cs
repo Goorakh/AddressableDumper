@@ -429,9 +429,7 @@ namespace AddressableDumper
                     case NonSolidToCamera:
                         return true;
                     default:
-#if DEBUG
                         Log.Debug($"{asset} is not static model: has component {c}");
-#endif
                         return false;
                 }
             });
@@ -495,9 +493,7 @@ namespace AddressableDumper
                     }
                 }
 
-#if DEBUG
                 Log.Debug($"Waiting {initialWaitTime} seconds for model to settle");
-#endif
 
                 yield return new WaitForSeconds(initialWaitTime);
             }

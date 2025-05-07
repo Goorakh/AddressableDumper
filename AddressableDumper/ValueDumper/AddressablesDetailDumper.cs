@@ -1,8 +1,12 @@
 ﻿using AddressableDumper.ValueDumper.Serialization;
 using Newtonsoft.Json;
 using RoR2;
+using System;
 using System.IO;
+using System.Linq;
 using System.Text;
+
+using Path = System.IO.Path;
 
 namespace AddressableDumper.ValueDumper
 {
@@ -22,8 +26,8 @@ namespace AddressableDumper.ValueDumper
 
             foreach (AssetInfo assetInfo in assetInfos)
             {
-                FilePath dumpFilePath = System.IO.Path.Combine(_addressablesDumpPath, assetInfo.Key) + ".txt";
-                dumpFilePath.FileNameWithoutExtension += $" ({assetInfo.AssetType.Name})";
+                FilePath dumpFilePath = $"{Path.Combine(_addressablesDumpPath, $"{assetInfo.Key} ({assetInfo.AssetType.Name})")}.txt";
+                FilePath originalFilePath = dumpFilePath;
 
                 Directory.CreateDirectory(dumpFilePath.DirectoryName);
 
@@ -48,6 +52,23 @@ namespace AddressableDumper.ValueDumper
 
                         ObjectSerializer serializer = new ObjectSerializer(jsonWriter, assetInfo.Asset);
                         serializer.Write();
+                    }
+                }
+
+                FilePath[] duplicateFiles = originalFilePath.GetAllExistingDuplicateFileNames().ToArray();
+                if (duplicateFiles.Length > 1)
+                {
+                    string[] fileContents = new string[duplicateFiles.Length];
+                    for (int i = 0; i < duplicateFiles.Length; i++)
+                    {
+                        fileContents[i] = File.ReadAllText(duplicateFiles[i]);
+                    }
+
+                    Array.Sort(fileContents, StringComparer.Ordinal);
+
+                    for (int i = 0; i < duplicateFiles.Length; i++)
+                    {
+                        File.WriteAllText(duplicateFiles[i], fileContents[i]);
                     }
                 }
             }

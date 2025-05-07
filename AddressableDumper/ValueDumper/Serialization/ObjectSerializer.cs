@@ -1253,6 +1253,25 @@ namespace AddressableDumper.ValueDumper.Serialization
                 return true;
             }
 
+            if (value is Material)
+            {
+                if (value == MaterialUtils.DefaultMaterial ||
+                    // HACK: This fucking sucks
+                    value.name == "Default-Material")
+                {
+                    builder.AddValueRaw("<Material_Default>");
+                    return true;
+                }
+            }
+            else if (value is Shader)
+            {
+                if (value == MaterialUtils.DefaultShader)
+                {
+                    builder.AddValueRaw("<Shader_Default>");
+                    return true;
+                }
+            }
+
             builder.AddStartObject();
 
             Type type = value.GetType();

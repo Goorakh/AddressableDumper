@@ -21,11 +21,13 @@ using UnityEngine.Networking;
 using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.SceneManagement;
 
+using Path = System.IO.Path;
+
 namespace AddressableDumper.ValueDumper
 {
     static class SceneDumper
     {
-        static readonly string _scenesDumpPath = System.IO.Path.Combine(Main.PersistentSaveDataDirectory, "scenes_dump");
+        static readonly string _scenesDumpPath = Path.Combine(Main.PersistentSaveDataDirectory, "scenes_dump");
 
         static ScenesDumperOperation _currentScenesDump;
 
@@ -192,7 +194,7 @@ namespace AddressableDumper.ValueDumper
             {
                 ResourceLocation = resourceLocation;
 
-                _sceneDumpDirectory = System.IO.Path.Combine(_scenesDumpPath, ResourceLocation.PrimaryKey);
+                _sceneDumpDirectory = Path.Combine(_scenesDumpPath, ResourceLocation.PrimaryKey);
             }
 
             public void DumpToFile(Scene sceneInstance)
@@ -209,7 +211,7 @@ namespace AddressableDumper.ValueDumper
 
                 // Split each root object into its own dump file to keep filesizes down
 
-                FilePath sceneInfoFilePath = System.IO.Path.Combine(_sceneDumpDirectory, "scene.txt");
+                FilePath sceneInfoFilePath = Path.Combine(_sceneDumpDirectory, "scene.txt");
                 using (FileStream sceneInfoFile = File.Open(sceneInfoFilePath, FileMode.CreateNew, FileAccess.Write))
                 {
                     using (StreamWriter fileWriter = new StreamWriter(sceneInfoFile, Encoding.UTF8, 1024, true))
@@ -242,7 +244,7 @@ namespace AddressableDumper.ValueDumper
                     }
                 }
 
-                string rootObjectsDirectory = System.IO.Path.Combine(_sceneDumpDirectory, "RootObjects");
+                string rootObjectsDirectory = Path.Combine(_sceneDumpDirectory, "RootObjects");
                 Directory.CreateDirectory(rootObjectsDirectory);
 
                 List<GameObject> rootObjects = new List<GameObject>(sceneInstance.rootCount);
@@ -259,9 +261,14 @@ namespace AddressableDumper.ValueDumper
                 for (int i = 0; i < rootObjects.Count; i++)
                 {
                     GameObject rootObject = rootObjects[i];
-                    string fileName = rootObject.name.FilterChars(System.IO.Path.GetInvalidFileNameChars());
+                    string fileName = rootObject.name.FilterChars(Path.GetInvalidFileNameChars());
 
-                    FilePath objectDumpPath = System.IO.Path.Combine(rootObjectsDirectory, fileName + ".txt");
+                    FilePath objectDumpPath = Path.Combine(rootObjectsDirectory, fileName + ".txt");
+                    if (objectDumpPath.Exists)
+                    {
+                        objectDumpPath.FileNameWithoutExtension += $" (obj index {i})";
+                    }
+
                     objectDumpPath.MakeUnique();
 
                     Log.Info($"Dumping '{sceneInstance.name}' root object '{rootObject.name}' to {objectDumpPath.FullPath}");

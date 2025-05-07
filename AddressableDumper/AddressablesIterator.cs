@@ -15,7 +15,7 @@ namespace AddressableDumper
 {
     public static class AddressablesIterator
     {
-        const int ASSET_COUNT_ESTIMATE = 20000;
+        const int ASSET_COUNT_ESTIMATE = 30000;
 
         static readonly string _addressablesCachePath = System.IO.Path.Combine(Main.PersistentSaveDataDirectory, "cache");
 
@@ -126,8 +126,6 @@ namespace AddressableDumper
                     }
                 }
 
-                List<SceneInstance> sceneInstances = new List<SceneInstance>();
-
                 using (FileStream scenesCacheFile = File.Open(_addressableSceneKeysCachePath, FileMode.Open, FileAccess.Read))
                 {
                     using (BinaryReader reader = new BinaryReader(scenesCacheFile, Encoding.UTF8, true))
@@ -188,9 +186,7 @@ namespace AddressableDumper
                         {
                             if (location.ProviderId == "UnityEngine.ResourceManagement.ResourceProviders.LegacyResourcesProvider")
                             {
-#if DEBUG
                                 Log.Debug($"Skipping invalid asset provider {location.ProviderId} ({location.PrimaryKey})");
-#endif
                                 continue;
                             }
 
@@ -206,9 +202,7 @@ namespace AddressableDumper
                                 }
                                 else
                                 {
-#if DEBUG
                                     Log.Debug($"Skipping invalid asset type {location.ResourceType.Name} ({location.PrimaryKey})");
-#endif
                                 }
                             }
                         }

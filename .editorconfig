@@ -2,3 +2,6 @@
 
 # Publicizer001: Accessing a member that was not originally public
 dotnet_diagnostic.Publicizer001.severity = none
+
+# IDE0051: Remove unused private members
+dotnet_diagnostic.IDE0051.severity = none

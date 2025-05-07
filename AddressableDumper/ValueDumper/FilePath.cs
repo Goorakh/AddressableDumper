@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Collections.Generic;
+using System.IO;
 
 namespace AddressableDumper.ValueDumper
 {
@@ -63,6 +64,19 @@ namespace AddressableDumper.ValueDumper
             {
                 FileNameWithoutExtension = originalFileName + $" ({fileNumber})";
                 fileNumber++;
+            }
+        }
+
+        public readonly IEnumerable<FilePath> GetAllExistingDuplicateFileNames()
+        {
+            FilePath current = this;
+            int fileNumber = 0;
+
+            while (current.Exists)
+            {
+                yield return current;
+                fileNumber++;
+                current.FileNameWithoutExtension = FileNameWithoutExtension + $" ({fileNumber})";
             }
         }
 

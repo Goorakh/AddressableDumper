@@ -30,9 +30,7 @@ namespace AddressableDumper
                 {
                     Directory.CreateDirectory(_persistentSaveDataDirectory);
 
-#if DEBUG
                     Log.Debug($"Created persistent save data directory: {_persistentSaveDataDirectory}");
-#endif
                 }
 
                 return _persistentSaveDataDirectory;
