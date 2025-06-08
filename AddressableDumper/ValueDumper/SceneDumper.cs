@@ -17,6 +17,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.Networking;
 using UnityEngine.ResourceManagement.ResourceLocations;
 using UnityEngine.SceneManagement;
@@ -84,6 +85,26 @@ namespace AddressableDumper.ValueDumper
         {
         }
 
+        delegate void orig_SceneManager_Internal_ActiveSceneChanged(Scene previousActiveScene, Scene newActiveScene);
+        static void SceneManager_Internal_ActiveSceneChanged(orig_SceneManager_Internal_ActiveSceneChanged orig, Scene previousActiveScene, Scene newActiveScene)
+        {
+            UnityAction<Scene, Scene> activeSceneChanged = typeof(SceneManager).GetField(nameof(SceneManager.activeSceneChanged), BindingFlags.Static | BindingFlags.NonPublic).GetValue(null) as UnityAction<Scene, Scene>;
+            if (activeSceneChanged != null)
+            {
+                foreach (UnityAction<Scene, Scene> activeSceneChangedInvoke in activeSceneChanged.GetInvocationList().Cast<UnityAction<Scene, Scene>>())
+                {
+                    try
+                    {
+                        activeSceneChangedInvoke(previousActiveScene, newActiveScene);
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Error_NoCallerPrefix(e);
+                    }
+                }
+            }
+        }
+
         class ScenesDumperOperation : IDisposable
         {
             IEnumerator<SceneInfo> _sceneInfoIterator;
@@ -101,35 +122,39 @@ namespace AddressableDumper.ValueDumper
 
                 SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
 
+                _temporaryDetours.Add(new ILHook(SymbolExtensions.GetMethodInfo<NetworkManager>(_ => _.ServerChangeScene(default)), preventExecution));
+
+                _temporaryDetours.Add(new NativeDetour(SymbolExtensions.GetMethodInfo(() => GameObject.DontDestroyOnLoad(default)), SymbolExtensions.GetMethodInfo(() => preventDontDestroyOnLoad(default))));
+
+                _temporaryDetours.Add(new Hook(typeof(SceneManager).GetMethod("Internal_ActiveSceneChanged", BindingFlags.NonPublic |
+                    BindingFlags.Static), SceneManager_Internal_ActiveSceneChanged));
+
                 foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
                 {
                     foreach (Type type in assembly.GetTypes())
                     {
-                        if (type.IsGenericType)
+                        if (type.IsGenericType || !type.IsClass)
                             continue;
 
                         if (typeof(MonoBehaviour).IsAssignableFrom(type))
                         {
                             const BindingFlags FLAGS = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
-                            MethodInfo awakeMethod = type.GetMethod("Awake", FLAGS);
-                            if (awakeMethod != null)
+                            void tryAddPreventHook(string methodName)
                             {
-                                _temporaryDetours.Add(new ILHook(awakeMethod, preventExecution));
+                                MethodInfo method = type.GetMethod(methodName, FLAGS);
+                                if (method != null && method.HasMethodBody())
+                                {
+                                    Log.Debug($"Adding prevent execution hook for {method.DeclaringType.FullName}.{method.Name}");
+                                    _temporaryDetours.Add(new ILHook(method, preventExecution));
+                                }
                             }
 
-                            MethodInfo onEnableMethod = type.GetMethod("OnEnable", FLAGS);
-                            if (onEnableMethod != null)
-                            {
-                                _temporaryDetours.Add(new ILHook(onEnableMethod, preventExecution));
-                            }
+                            tryAddPreventHook("Awake");
+                            tryAddPreventHook("OnEnable");
                         }
                     }
                 }
-
-                _temporaryDetours.Add(new ILHook(SymbolExtensions.GetMethodInfo<NetworkManager>(_ => _.ServerChangeScene(default)), preventExecution));
-
-                _temporaryDetours.Add(new NativeDetour(SymbolExtensions.GetMethodInfo(() => GameObject.DontDestroyOnLoad(default)), SymbolExtensions.GetMethodInfo(() => preventDontDestroyOnLoad(default))));
 
                 _sceneInfoIterator = AddressablesIterator.GetSceneResourceLocations()
                                                          .Select(location => new SceneInfo(location))
@@ -171,7 +196,7 @@ namespace AddressableDumper.ValueDumper
 
                 if (_sceneInfoIterator.MoveNext())
                 {
-                    new NetworkManagerSystem.AddressablesChangeSceneAsyncOperation(_sceneInfoIterator.Current.ResourceLocation.PrimaryKey, LoadSceneMode.Single, true);
+                    new NetworkManagerSystem.AddressablesChangeSceneAsyncOperation(_sceneInfoIterator.Current.ResourceLocation.PrimaryKey, LoadSceneMode.Single, true, false);
                 }
                 else
                 {

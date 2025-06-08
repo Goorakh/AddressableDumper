@@ -13,6 +13,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
@@ -166,6 +167,9 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return true;
                 
                 if (buildCollectionWriteOperation(value, builder, serializationArgs))
+                    return true;
+
+                if (buildAssetReferenceWriteOperation(value, builder, serializationArgs))
                     return true;
 
                 if (buildUnityObjectWriteOperation(value, builder, serializationArgs))
@@ -839,6 +843,186 @@ namespace AddressableDumper.ValueDumper.Serialization
             return false;
         }
 
+        static void addComponentString(StringBuilder sb, UnityEngine.Object obj)
+        {
+            sb.Append($"component<{obj.GetType().Name}>(");
+
+            if (obj is Component component && tryGetComponentIndex(obj.GetGameObject(), component, out int componentIndex))
+            {
+                sb.Append($"component_idx={componentIndex}");
+            }
+
+            sb.Append(')');
+        }
+
+        static void addObjectRefPath(StringBuilder sb, IEnumerable<Transform> childOrder, string rootName)
+        {
+            sb.Append("objref('");
+
+            bool appendedAnyObjectPath = false;
+            int currentChildIndex = 0;
+
+            void appendPath(string name)
+            {
+                if (appendedAnyObjectPath)
+                    sb.Append('/');
+
+                sb.Append(name);
+                appendedAnyObjectPath = true;
+            }
+
+            List<string> childIndexNames = [];
+
+            if (childOrder is ICollection collection)
+            {
+                childIndexNames.Capacity = collection.Count;
+            }
+
+            if (!string.IsNullOrEmpty(rootName))
+            {
+                appendPath(rootName);
+                childIndexNames.Add("$root");
+            }
+
+            foreach (Transform child in childOrder)
+            {
+                appendPath(child.name);
+
+                string childIndexName;
+                if (tryGetChildIndex(child, out int childIndex))
+                {
+                    childIndexName = childIndex.ToString();
+                }
+                else if (currentChildIndex == 0 && child.parent == null)
+                {
+                    childIndexName = "$root";
+                }
+                else
+                {
+                    throw new Exception($"Failed to find child index for '{child}' ({currentChildIndex})");
+                }
+
+                childIndexNames.Add(childIndexName);
+
+                appendedAnyObjectPath = true;
+                currentChildIndex++;
+            }
+
+            sb.Append('\'');
+
+            sb.Append($", child_idxs=[{string.Join(", ", childIndexNames)}]");
+
+            sb.Append(')');
+        }
+
+        static bool tryGetAssetRefString(UnityEngine.Object obj, out string assetRefString)
+        {
+            // Resolve asset reference
+            // - Check object for asset reference
+            // - Check parent(s) for asset reference
+
+            StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
+
+            GameObject gameObject = obj.GetGameObject();
+
+            UnityEngine.Object assetKey = gameObject ? gameObject : obj;
+            GameObject assetKeyGameObject;
+
+            bool appendComponentType = obj != assetKey;
+            bool foundAsset = false;
+
+            Stack<Transform> childPathStack = new Stack<Transform>();
+
+            do
+            {
+                if (AddressablesIterator.AssetInfoLookup.TryGetValue(assetKey, out AssetInfo assetInfo))
+                {
+                    stringBuilder.Append($"assetref<{assetInfo.AssetType.FullName}>('{assetInfo.Key}')");
+
+                    if (childPathStack.Count > 0)
+                    {
+                        stringBuilder.Append('.');
+                        addObjectRefPath(stringBuilder, childPathStack, null);
+                    }
+
+                    foundAsset = true;
+                    break;
+                }
+
+                assetKeyGameObject = assetKey as GameObject;
+
+                if (assetKeyGameObject)
+                {
+                    childPathStack.Push(assetKeyGameObject.transform);
+                }
+
+            } while (assetKeyGameObject && (assetKey = assetKeyGameObject.transform.parent?.gameObject));
+
+            if (foundAsset)
+            {
+                if (appendComponentType)
+                {
+                    stringBuilder.Append('.');
+                    addComponentString(stringBuilder, obj);
+                }
+
+                assetRefString = stringBuilder.ToString();
+            }
+            else
+            {
+                assetRefString = default;
+            }
+
+            stringBuilder = HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
+
+            return foundAsset;
+        }
+
+        bool buildAssetReferenceWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
+        {
+            if (value is not AssetReference assetReference)
+                return false;
+
+            UnityEngine.Object asset = null;
+            if (assetReference.RuntimeKeyIsValid())
+            {
+                static bool isAssetReferenceT(Type assetReferenceType, out Type assetType)
+                {
+                    if (assetReferenceType != null)
+                    {
+                        if (assetReferenceType.IsGenericType && assetReferenceType.GetGenericTypeDefinition() == typeof(AssetReferenceT<>))
+                        {
+                            assetType = assetReferenceType.GenericTypeArguments[0];
+                            return true;
+                        }
+
+                        return isAssetReferenceT(assetReferenceType.BaseType, out assetType);
+                    }
+
+                    assetType = null;
+                    return false;
+                }
+
+                Type assetType = typeof(UnityEngine.Object);
+
+                Type assetReferenceType = assetReference.GetType();
+                if (isAssetReferenceT(assetReferenceType, out Type assetReferenceAssetType))
+                {
+                    assetType = assetReferenceAssetType;
+                }
+
+                asset = FixedAddressableLoad.LoadAsset(assetReference.RuntimeKey, assetType);
+            }
+
+            if (tryGetAssetRefString(asset, out string assetRefString))
+            {
+                builder.AddValueRaw(assetRefString);
+                return true;
+            }
+
+            return false;
+        }
+
         bool buildUnityObjectWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             if (value is not UnityEngine.Object obj || !obj)
@@ -846,142 +1030,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             if (!isSerializingRootValue)
             {
-                void addComponentString(StringBuilder sb, UnityEngine.Object obj)
-                {
-                    sb.Append($"component<{obj.GetType().Name}>(");
-
-                    if (obj is Component component && tryGetComponentIndex(obj.GetGameObject(), component, out int componentIndex))
-                    {
-                        sb.Append($"component_idx={componentIndex}");
-                    }
-
-                    sb.Append(')');
-                }
-
-                void addObjectRefPath(StringBuilder sb, IEnumerable<Transform> childOrder, string rootName)
-                {
-                    sb.Append("objref('");
-
-                    bool appendedAnyObjectPath = false;
-                    int currentChildIndex = 0;
-
-                    void appendPath(string name)
-                    {
-                        if (appendedAnyObjectPath)
-                            sb.Append('/');
-
-                        sb.Append(name);
-                        appendedAnyObjectPath = true;
-                    }
-
-                    List<string> childIndexNames = [];
-
-                    if (childOrder is ICollection collection)
-                    {
-                        childIndexNames.Capacity = collection.Count;
-                    }
-
-                    if (!string.IsNullOrEmpty(rootName))
-                    {
-                        appendPath(rootName);
-                        childIndexNames.Add("$root");
-                    }
-
-                    foreach (Transform child in childOrder)
-                    {
-                        appendPath(child.name);
-
-                        string childIndexName;
-                        if (tryGetChildIndex(child, out int childIndex))
-                        {
-                            childIndexName = childIndex.ToString();
-                        }
-                        else if (currentChildIndex == 0 && child.parent == null)
-                        {
-                            childIndexName = "$root";
-                        }
-                        else
-                        {
-                            throw new Exception($"Failed to find child index for '{child}' ({currentChildIndex})");
-                        }
-
-                        childIndexNames.Add(childIndexName);
-
-                        appendedAnyObjectPath = true;
-                        currentChildIndex++;
-                    }
-
-                    sb.Append('\'');
-
-                    sb.Append($", child_idxs=[{string.Join(", ", childIndexNames)}]");
-
-                    sb.Append(')');
-                }
-
-                bool tryGetAssetRefString(UnityEngine.Object obj, out string assetRefString)
-                {
-                    // Resolve asset reference
-                    // - Check object for asset reference
-                    // - Check parent(s) for asset reference
-
-                    StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
-
-                    GameObject gameObject = obj.GetGameObject();
-
-                    UnityEngine.Object assetKey = gameObject ? gameObject : obj;
-                    GameObject assetKeyGameObject;
-
-                    bool appendComponentType = obj != assetKey;
-                    bool foundAsset = false;
-
-                    Stack<Transform> childPathStack = new Stack<Transform>();
-
-                    do
-                    {
-                        if (AddressablesIterator.AssetInfoLookup.TryGetValue(assetKey, out AssetInfo assetInfo))
-                        {
-                            stringBuilder.Append($"assetref<{assetInfo.AssetType.FullName}>('{assetInfo.Key}')");
-
-                            if (childPathStack.Count > 0)
-                            {
-                                stringBuilder.Append('.');
-                                addObjectRefPath(stringBuilder, childPathStack, null);
-                            }
-
-                            foundAsset = true;
-                            break;
-                        }
-
-                        assetKeyGameObject = assetKey as GameObject;
-
-                        if (assetKeyGameObject)
-                        {
-                            childPathStack.Push(assetKeyGameObject.transform);
-                        }
-
-                    } while (assetKeyGameObject && (assetKey = assetKeyGameObject.transform.parent?.gameObject));
-
-                    if (foundAsset)
-                    {
-                        if (appendComponentType)
-                        {
-                            stringBuilder.Append('.');
-                            addComponentString(stringBuilder, obj);
-                        }
-
-                        assetRefString = stringBuilder.ToString();
-                    }
-                    else
-                    {
-                        assetRefString = default;
-                    }
-
-                    stringBuilder = HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
-
-                    return foundAsset;
-                }
-
-                bool tryGetChildRefString(UnityEngine.Object obj, Transform root, out string childRefString)
+                static bool tryGetChildRefString(UnityEngine.Object obj, Transform root, out string childRefString)
                 {
                     GameObject gameObject = obj.GetGameObject();
                     if (!gameObject)
@@ -1141,7 +1190,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             return true;
         }
 
-        bool tryGetComponentIndex(GameObject obj, Component component, out int index)
+        static bool tryGetComponentIndex(GameObject obj, Component component, out int index)
         {
             index = 0;
             if (!obj)
@@ -1161,7 +1210,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             return false;
         }
 
-        bool tryGetChildIndex(Transform transform, out int index)
+        static bool tryGetChildIndex(Transform transform, out int index)
         {
             index = 0;
             Transform parent = transform ? transform.parent : null;
@@ -1479,8 +1528,39 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     if (!serializationContext.IncludeObsolete && member.GetCustomAttribute(typeof(ObsoleteAttribute)) != null)
                     {
+                        bool isWhitelistedDeprecated = false;
+
 #pragma warning disable CS0618 // Type or member is obsolete
-                        bool isWhitelistedDeprecated = member.DeclaringType == typeof(ItemDef) && member.Name == nameof(ItemDef.deprecatedTier);
+                        if (member.DeclaringType == typeof(ItemDef))
+                        {
+                            switch (member.Name)
+                            {
+                                case nameof(ItemDef.deprecatedTier):
+                                case nameof(ItemDef.pickupModelPrefab):
+                                    isWhitelistedDeprecated |= true;
+                                    break;
+                            }
+                        }
+                        else if (member.DeclaringType == typeof(ArtifactDef))
+                        {
+                            isWhitelistedDeprecated |= member.Name == nameof(ArtifactDef.pickupModelPrefab);
+                        }
+                        else if (member.DeclaringType == typeof(EquipmentDef))
+                        {
+                            isWhitelistedDeprecated |= member.Name == nameof(EquipmentDef.pickupModelPrefab);
+                        }
+                        else if (member.DeclaringType == typeof(SceneDef))
+                        {
+                            switch (member.Name)
+                            {
+                                case nameof(SceneDef.previewTexture):
+                                case nameof(SceneDef.portalMaterial):
+                                case nameof(SceneDef.dioramaPrefab):
+                                case nameof(SceneDef.preferredPortalPrefab):
+                                    isWhitelistedDeprecated |= true;
+                                    break;
+                            }
+                        }
 #pragma warning restore CS0618 // Type or member is obsolete
 
                         if (!isWhitelistedDeprecated)
