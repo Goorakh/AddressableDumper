@@ -29,6 +29,14 @@ dotnet_naming_rule.non_field_members_should_be_pascal_case.severity = silent
 dotnet_naming_rule.non_field_members_should_be_pascal_case.symbols = non_field_members
 dotnet_naming_rule.non_field_members_should_be_pascal_case.style = pascal_case
 
+# Indentation preferences
+csharp_indent_block_contents = true
+csharp_indent_braces = false
+csharp_indent_case_contents = true
+csharp_indent_case_contents_when_block = false
+csharp_indent_labels = one_less_than_current
+csharp_indent_switch_labels = true
+
 # Symbol specifications
 
 dotnet_naming_symbols.interface.applicable_kinds = interface
