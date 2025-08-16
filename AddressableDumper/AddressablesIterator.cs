@@ -186,7 +186,7 @@ namespace AddressableDumper
                         {
                             if (location.ProviderId == "UnityEngine.ResourceManagement.ResourceProviders.LegacyResourcesProvider")
                             {
-                                Log.Debug($"Skipping invalid asset provider {location.ProviderId} ({location.PrimaryKey})");
+                                Log.Info($"Skipping invalid asset provider {location.ProviderId} ({location.PrimaryKey})");
                                 continue;
                             }
 
@@ -202,7 +202,7 @@ namespace AddressableDumper
                                 }
                                 else
                                 {
-                                    Log.Debug($"Skipping invalid asset type {location.ResourceType.Name} ({location.PrimaryKey})");
+                                    Log.Info($"Skipping invalid asset type {location.ResourceType.Name} ({location.PrimaryKey})");
                                 }
                             }
                         }
