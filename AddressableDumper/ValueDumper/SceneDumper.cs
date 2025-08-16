@@ -270,57 +270,113 @@ namespace AddressableDumper.ValueDumper
                 }
 
                 string rootObjectsDirectory = Path.Combine(_sceneDumpDirectory, "RootObjects");
-                Directory.CreateDirectory(rootObjectsDirectory);
 
                 List<GameObject> rootObjects = new List<GameObject>(sceneInstance.rootCount);
                 sceneInstance.GetRootGameObjects(rootObjects);
 
-                HashSet<Transform> rootTransformsSet = [];
-                foreach (GameObject rootObject in rootObjects)
+                serializeRootObjects(sceneInstance, rootObjects, rootObjectsDirectory);
+
+                static void serializeRootObjects(Scene sceneInstance, IList<GameObject> rootObjects, string rootFilePath)
                 {
-                    rootTransformsSet.Add(rootObject.transform.root);
-                }
+                    Directory.CreateDirectory(rootFilePath);
 
-                Transform[] rootTransforms = rootTransformsSet.ToArray();
-
-                for (int i = 0; i < rootObjects.Count; i++)
-                {
-                    GameObject rootObject = rootObjects[i];
-                    string fileName = rootObject.name.FilterChars(Path.GetInvalidFileNameChars());
-
-                    FilePath objectDumpPath = Path.Combine(rootObjectsDirectory, fileName + ".txt");
-                    if (objectDumpPath.Exists)
+                    HashSet<Transform> rootTransformsSet = [];
+                    foreach (GameObject rootObject in rootObjects)
                     {
-                        objectDumpPath.FileNameWithoutExtension += $" (obj index {i})";
+                        rootTransformsSet.Add(rootObject.transform.root);
                     }
 
-                    objectDumpPath.MakeUnique();
+                    Transform[] rootTransforms = [.. rootTransformsSet];
 
-                    Log.Info($"Dumping '{sceneInstance.name}' root object '{rootObject.name}' to {objectDumpPath.FullPath}");
-
-                    using (FileStream fileStream = File.Open(objectDumpPath, FileMode.CreateNew, FileAccess.Write))
+                    for (int i = 0; i < rootObjects.Count; i++)
                     {
-                        using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
+                        bool requiresSplit = false;
+
+                        GameObject rootObject = rootObjects[i];
+                        string fileName = rootObject.name.FilterChars(Path.GetInvalidFileNameChars());
+
+                        FilePath objectDumpPath = Path.Combine(rootFilePath, $"{i} -- {fileName}.txt");
+                        objectDumpPath.MakeUnique();
+
+                        if (!requiresSplit)
                         {
-                            fileWriter.WriteLine($"// Scene: '{sceneInstance.path}'");
-                            fileWriter.WriteLine($"// Root Object Index: {i}");
-                            fileWriter.WriteLine();
+                            Log.Info($"Dumping '{sceneInstance.name}' root object '{rootObject.name}' to {objectDumpPath.FullPath}");
 
-                            using JsonTextWriter jsonWriter = new JsonTextWriter(fileWriter)
+                            using (FileStream fileStream = File.Open(objectDumpPath, FileMode.CreateNew, FileAccess.Write))
                             {
-                                Formatting = Formatting.Indented,
-                                CloseOutput = false,
-                                AutoCompleteOnClose = false,
-                            };
+                                using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
+                                {
+                                    fileWriter.WriteLine($"// Scene: '{sceneInstance.path}'");
+                                    fileWriter.WriteLine();
 
-                            ObjectSerializer serializer = new ObjectSerializer(jsonWriter, rootObject)
+                                    using JsonTextWriter jsonWriter = new JsonTextWriter(fileWriter)
+                                    {
+                                        Formatting = Formatting.Indented,
+                                        CloseOutput = false,
+                                        AutoCompleteOnClose = false,
+                                    };
+
+                                    ObjectSerializer serializer = new ObjectSerializer(jsonWriter, rootObject)
+                                    {
+                                        SerializingScene = sceneInstance,
+                                        AdditionalReferenceRoots = rootTransforms,
+                                        ExcludeNonDeterministicValues = true
+                                    };
+
+                                    serializer.Write();
+
+                                    const long KB_IN_BYTES = 1000;
+                                    const long MB_IN_BYTES = 1000 * KB_IN_BYTES;
+
+                                    if (fileStream.Length > 99 * MB_IN_BYTES)
+                                    {
+                                        Log.Warning($"Splitting large scene file at '{objectDumpPath}'");
+                                        requiresSplit = true;
+                                    }
+                                }
+                            }
+
+                            if (requiresSplit)
                             {
-                                SerializingScene = sceneInstance,
-                                AdditionalReferenceRoots = rootTransforms,
-                                ExcludeNonDeterministicValues = true
-                            };
+                                File.Delete(objectDumpPath);
+                            }
+                        }
 
-                            serializer.Write();
+                        if (requiresSplit)
+                        {
+                            GameObject[] childObjects = new GameObject[rootObject.transform.childCount];
+                            for (int j = 0; j < rootObject.transform.childCount; j++)
+                            {
+                                childObjects[j] = rootObject.transform.GetChild(j).gameObject;
+                            }
+
+                            using (FileStream fileStream = File.Open(objectDumpPath, FileMode.CreateNew, FileAccess.Write))
+                            {
+                                using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
+                                {
+                                    fileWriter.WriteLine($"// Scene: '{sceneInstance.path}'");
+                                    fileWriter.WriteLine();
+
+                                    using JsonTextWriter jsonWriter = new JsonTextWriter(fileWriter)
+                                    {
+                                        Formatting = Formatting.Indented,
+                                        CloseOutput = false,
+                                        AutoCompleteOnClose = false,
+                                    };
+
+                                    ObjectSerializer serializer = new ObjectSerializer(jsonWriter, rootObject)
+                                    {
+                                        SerializingScene = sceneInstance,
+                                        AdditionalReferenceRoots = rootTransforms,
+                                        ExcludeNonDeterministicValues = true,
+                                        SerializeChildren = false
+                                    };
+
+                                    serializer.Write();
+                                }
+                            }
+
+                            serializeRootObjects(sceneInstance, childObjects, Path.GetFileNameWithoutExtension(objectDumpPath));
                         }
                     }
                 }

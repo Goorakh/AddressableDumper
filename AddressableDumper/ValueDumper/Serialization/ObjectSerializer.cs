@@ -71,6 +71,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         public bool ExcludeNonDeterministicValues { get; set; } = false;
 
+        public bool SerializeChildren { get; set; } = true;
+
         public ObjectSerializer(JsonWriter writer, object value)
         {
             _writer = writer;
@@ -1175,6 +1177,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             builder.AddEndArray();
 
+            if (SerializeChildren)
+            {
             builder.AddPropertyName("$children");
             builder.AddStartArray();
 
@@ -1184,6 +1188,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             }
 
             builder.AddEndArray();
+            }
 
             builder.AddEndObject();
 
