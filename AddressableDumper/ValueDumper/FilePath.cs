@@ -80,6 +80,16 @@ namespace AddressableDumper.ValueDumper
             }
         }
 
+        public override readonly string ToString()
+        {
+            return FullPath;
+        }
+
+        public override readonly int GetHashCode()
+        {
+            return FullPath.GetHashCode();
+        }
+
         public static implicit operator string(FilePath file)
         {
             return file.FullPath;
