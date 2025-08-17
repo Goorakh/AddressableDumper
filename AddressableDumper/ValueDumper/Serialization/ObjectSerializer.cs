@@ -2,8 +2,6 @@
 using AddressableDumper.Utils.Extensions;
 using Newtonsoft.Json;
 using RoR2;
-using RoR2.Audio;
-using RoR2.EntitlementManagement;
 using RoR2.Navigation;
 using RoR2.Projectile;
 using System;
@@ -11,6 +9,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -165,9 +164,131 @@ namespace AddressableDumper.ValueDumper.Serialization
                     return true;
                 }
 
+                Type valueType = value.GetType();
+                if (valueType.IsEnum && valueType.GetCustomAttribute<FlagsAttribute>() != null)
+                {
+                    StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
+                    try
+                    {
+                        Type enumUnderlyingType = valueType.GetEnumUnderlyingType();
+                        TypeCode enumUnderlyingTypeCode = Type.GetTypeCode(enumUnderlyingType);
+                        int enumBitCount = Marshal.SizeOf(enumUnderlyingType) * 8;
+
+                        for (int bit = 0; bit < enumBitCount; bit++)
+                        {
+                            // I'm sure theres a better way to do this,
+                            // and if you've got one, then please! Keep it to yourself - I don't care
+                            object enumValue;
+                            bool valueHasFlag;
+
+                            switch (enumUnderlyingTypeCode)
+                            {
+                                case TypeCode.Byte:
+                                {
+                                    byte flagValue = (byte)(1U << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((byte)value & flagValue) != 0;
+                                    break;
+                                }
+                                case TypeCode.Int16:
+                                {
+                                    short flagValue = (short)(1 << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((short)value & flagValue) != 0;
+                                    break;
+                                }
+                                case TypeCode.Int32:
+                                {
+                                    int flagValue = (int)(1 << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((int)value & flagValue) != 0;
+                                    break;
+                                }
+                                case TypeCode.Int64:
+                                {
+                                    long flagValue = (long)(1L << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((long)value & flagValue) != 0;
+                                    break;
+                                }
+                                case TypeCode.SByte:
+                                {
+                                    sbyte flagValue = (sbyte)(1 << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((sbyte)value & flagValue) != 0;
+                                    break;
+                                }
+                                case TypeCode.UInt16:
+                                {
+                                    ushort flagValue = (ushort)(1U << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((ushort)value & flagValue) != 0;
+                                    break;
+                                }
+                                case TypeCode.UInt32:
+                                {
+                                    uint flagValue = (uint)(1U << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((uint)value & flagValue) != 0;
+                                    break;
+                                }
+                                case TypeCode.UInt64:
+                                {
+                                    ulong flagValue = (ulong)(1UL << bit);
+                                    enumValue = flagValue;
+                                    valueHasFlag = ((ulong)value & flagValue) != 0;
+                                    break;
+                                }
+                                default:
+                                    throw new NotImplementedException($"Enum typecode is not implemented: {enumUnderlyingTypeCode}");
+                            }
+
+                            if (valueHasFlag)
+                            {
+                                string enumName = Enum.GetName(valueType, enumValue);
+                                if (string.IsNullOrEmpty(enumName))
+                                {
+                                    enumName = enumValue.ToString();
+                                }
+
+                                if (stringBuilder.Length > 0)
+                                {
+                                    stringBuilder.Append(", ");
+                                }
+
+                                stringBuilder.Append(enumName);
+                            }
+                        }
+
+                        string fullName;
+                        if (stringBuilder.Length > 0)
+                        {
+                            fullName = stringBuilder.ToString();
+                        }
+                        else
+                        {
+                            string noneName = Enum.GetName(valueType, 0);
+                            if (string.IsNullOrEmpty(noneName))
+                            {
+                                noneName = "None";
+                            }
+
+                            fullName = noneName;
+                        }
+
+                        builder.AddValueRaw(fullName);
+
+                        return true;
+                    }
+                    finally
+                    {
+                        stringBuilder = HG.StringBuilderPool.ReturnStringBuilder(stringBuilder);
+                    }
+                }
+
                 if (buildCustomFormattedWriteOperation(value, builder, serializationArgs))
                     return true;
-                
+
                 if (buildCollectionWriteOperation(value, builder, serializationArgs))
                     return true;
 
@@ -649,10 +770,6 @@ namespace AddressableDumper.ValueDumper.Serialization
                 case ParticleSystem.CustomDataModule:
                 case ParticleSystem.LifetimeByEmitterSpeedModule:
                 {
-                    builder.AddStartObject();
-
-                    buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
-
                     bool enabled = value switch
                     {
                         ParticleSystem.MainModule => true,
@@ -683,6 +800,10 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     if (enabled)
                     {
+                        builder.AddStartObject();
+
+                        buildTypeFieldWriteOperation(value.GetType(), builder, serializationArgs);
+
                         buildSerializedMemberWriteOperations(value, builder, serializationArgs, t =>
                         {
                             return new MemberSerializationContext(MemberTypes.Property,
@@ -810,15 +931,13 @@ namespace AddressableDumper.ValueDumper.Serialization
                                 break;
                             }
                         }
-                    }
-                    else
-                    {
-                        buildPropertyWithValueWriteOperation("enabled", enabled, builder, serializationArgs);
+
+                        builder.AddEndObject();
+
+                        return true;
                     }
 
-                    builder.AddEndObject();
-
-                    return true;
+                    break;
                 }
                 case HumanDescription:
                 case HumanBone:
@@ -1016,7 +1135,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 asset = FixedAddressableLoad.LoadAsset(assetReference.RuntimeKey, assetType);
             }
 
-            if (tryGetAssetRefString(asset, out string assetRefString))
+            if (asset && tryGetAssetRefString(asset, out string assetRefString))
             {
                 builder.AddValueRaw(assetRefString);
                 return true;
@@ -1179,15 +1298,15 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             if (SerializeChildren)
             {
-            builder.AddPropertyName("$children");
-            builder.AddStartArray();
+                builder.AddPropertyName("$children");
+                builder.AddStartArray();
 
-            for (int i = 0; i < transform.childCount; i++)
-            {
-                buildGameObjectWriteOperation(transform.GetChild(i), builder, serializationArgs);
-            }
+                for (int i = 0; i < transform.childCount; i++)
+                {
+                    buildGameObjectWriteOperation(transform.GetChild(i), builder, serializationArgs);
+                }
 
-            builder.AddEndArray();
+                builder.AddEndArray();
             }
 
             builder.AddEndObject();
@@ -1535,38 +1654,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                     {
                         bool isWhitelistedDeprecated = false;
 
-#pragma warning disable CS0618 // Type or member is obsolete
-                        if (member.DeclaringType == typeof(ItemDef))
+                        if (member.DeclaringType.Assembly == typeof(RoR2Application).Assembly)
                         {
-                            switch (member.Name)
-                            {
-                                case nameof(ItemDef.deprecatedTier):
-                                case nameof(ItemDef.pickupModelPrefab):
-                                    isWhitelistedDeprecated |= true;
-                                    break;
-                            }
+                            isWhitelistedDeprecated = true;
                         }
-                        else if (member.DeclaringType == typeof(ArtifactDef))
-                        {
-                            isWhitelistedDeprecated |= member.Name == nameof(ArtifactDef.pickupModelPrefab);
-                        }
-                        else if (member.DeclaringType == typeof(EquipmentDef))
-                        {
-                            isWhitelistedDeprecated |= member.Name == nameof(EquipmentDef.pickupModelPrefab);
-                        }
-                        else if (member.DeclaringType == typeof(SceneDef))
-                        {
-                            switch (member.Name)
-                            {
-                                case nameof(SceneDef.previewTexture):
-                                case nameof(SceneDef.portalMaterial):
-                                case nameof(SceneDef.dioramaPrefab):
-                                case nameof(SceneDef.preferredPortalPrefab):
-                                    isWhitelistedDeprecated |= true;
-                                    break;
-                            }
-                        }
-#pragma warning restore CS0618 // Type or member is obsolete
 
                         if (!isWhitelistedDeprecated)
                         {
@@ -1764,31 +1855,51 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     if (memberValueType != null)
                     {
+                        bool isCatalogIndex = false;
+
+                        if (memberValueType.Name.EndsWith("index", StringComparison.OrdinalIgnoreCase))
+                        {
+                            bool isRealEnum = false;
+                            if (memberValueType.IsEnum)
+                            {
+                                bool hasAnyRealName = false;
+                                foreach (string name in Enum.GetNames(memberValueType))
+                                {
+                                    if (!string.Equals(name, "None", StringComparison.OrdinalIgnoreCase) &&
+                                        !string.Equals(name, "Invalid", StringComparison.OrdinalIgnoreCase) &&
+                                        !string.Equals(name, "Count", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        hasAnyRealName = true;
+                                        break;
+                                    }
+                                }
+
+                                if (hasAnyRealName)
+                                {
+                                    isRealEnum = true;
+                                }
+                            }
+
+                            // Don't exclude "real" enums (TeamIndex, ColorIndex, etc.)
+                            if (!isRealEnum)
+                            {
+                                string catalogTypeName = memberValueType.Name[0..^5] + "Catalog";
+                                if (!string.IsNullOrEmpty(memberValueType.Namespace))
+                                {
+                                    catalogTypeName = memberValueType.Namespace + "." + catalogTypeName;
+                                }
+
+                                if (memberValueType.Assembly.GetType(catalogTypeName, false, true) != null)
+                                {
+                                    isCatalogIndex = true;
+                                }
+                            }
+                        }
+
                         // Exclude catalog indices, since they are assigned at runtime it doesn't make sense for a dump
-                        if (memberValueType == typeof(AchievementIndex) ||
-                            memberValueType == typeof(ArtifactIndex) ||
-                            memberValueType == typeof(BodyIndex) ||
-                            memberValueType == typeof(BuffIndex) ||
-                            memberValueType == typeof(EffectIndex) ||
-                            memberValueType == typeof(EntityStateIndex) ||
-                            memberValueType == typeof(EquipmentIndex) ||
-                            memberValueType == typeof(GameEndingIndex) ||
-                            memberValueType == typeof(GameModeIndex) ||
-                            memberValueType == typeof(ItemIndex) ||
-                            memberValueType == typeof(MiscPickupIndex) ||
-                            memberValueType == typeof(MusicTrackIndex) ||
-                            memberValueType == typeof(PickupIndex) ||
-                            memberValueType == typeof(SceneIndex) ||
-                            memberValueType == typeof(ServerAchievementIndex) ||
-                            memberValueType == typeof(SkinIndex) ||
-                            memberValueType == typeof(SurfaceDefIndex) ||
-                            memberValueType == typeof(SurvivorIndex) ||
-                            memberValueType == typeof(UnlockableIndex) ||
+                        if (isCatalogIndex ||
                             memberValueType == typeof(BlockMapCellIndex) ||
-                            memberValueType == typeof(EntitlementIndex) ||
-                            memberValueType == typeof(MasterCatalog.MasterIndex) ||
-                            memberValueType == typeof(MasterCatalog.NetworkMasterIndex) ||
-                            memberValueType == typeof(NetworkSoundEventIndex))
+                            memberValueType == typeof(MasterCatalog.NetworkMasterIndex))
                         {
                             continue;
                         }
