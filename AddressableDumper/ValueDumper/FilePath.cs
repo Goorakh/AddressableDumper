@@ -7,7 +7,7 @@ namespace AddressableDumper.ValueDumper
     {
         public readonly bool Exists => File.Exists(FullPath);
 
-        public string DirectoryName
+        public string DirectoryPath
         {
             readonly get
             {
@@ -27,7 +27,7 @@ namespace AddressableDumper.ValueDumper
             }
             set
             {
-                FullPath = Path.Combine(DirectoryName, value);
+                FullPath = Path.Combine(DirectoryPath, value);
             }
         }
 
@@ -51,7 +51,13 @@ namespace AddressableDumper.ValueDumper
             }
             set
             {
-                FileName = FileNameWithoutExtension + (value ?? string.Empty);
+                string extension = value ?? string.Empty;
+                if (!string.IsNullOrEmpty(extension) && extension[0] != '.')
+                {
+                    extension = "." + extension;
+                }
+
+                FileName = FileNameWithoutExtension + extension;
             }
         }
 

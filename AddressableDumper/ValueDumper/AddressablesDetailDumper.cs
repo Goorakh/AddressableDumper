@@ -29,7 +29,7 @@ namespace AddressableDumper.ValueDumper
                 FilePath dumpFilePath = $"{Path.Combine(_addressablesDumpPath, $"{assetInfo.Key} ({assetInfo.AssetType.Name})")}.txt";
                 FilePath originalFilePath = dumpFilePath;
 
-                Directory.CreateDirectory(dumpFilePath.DirectoryName);
+                Directory.CreateDirectory(dumpFilePath.DirectoryPath);
 
                 dumpFilePath.MakeUnique();
 

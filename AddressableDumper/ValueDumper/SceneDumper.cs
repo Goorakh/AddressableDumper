@@ -376,7 +376,7 @@ namespace AddressableDumper.ValueDumper
                                 }
                             }
 
-                            serializeRootObjects(sceneInstance, childObjects, Path.GetFileNameWithoutExtension(objectDumpPath));
+                            serializeRootObjects(sceneInstance, childObjects, Path.Combine(objectDumpPath.DirectoryPath, objectDumpPath.FileNameWithoutExtension));
                         }
                     }
                 }
