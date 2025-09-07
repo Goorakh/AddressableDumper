@@ -325,8 +325,8 @@ namespace AddressableDumper.ValueDumper
 
                                     serializer.Write();
 
-                                    const long KB_IN_BYTES = 1000;
-                                    const long MB_IN_BYTES = 1000 * KB_IN_BYTES;
+                                    const long KB_IN_BYTES = 1024;
+                                    const long MB_IN_BYTES = 1024 * KB_IN_BYTES;
 
                                     if (fileStream.Length > 99 * MB_IN_BYTES)
                                     {
