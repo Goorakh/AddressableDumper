@@ -1218,17 +1218,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                     }
                 }
 
-                bool isSerializingRuntimeAnimatorController = Array.FindLastIndex(serializingSteps, s => s.Value is RuntimeAnimatorController) != -1;
-
-                bool isSerializingAnimatorControllerClip = isSerializingRuntimeAnimatorController && obj is AnimationClip;
-
-                if (!isSerializingAnimatorControllerClip)
+                if (tryGetAssetRefString(obj, out string assetRefString))
                 {
-                    if (tryGetAssetRefString(obj, out string assetRefString))
-                    {
-                        builder.AddValueRaw(assetRefString);
-                        return true;
-                    }
+                    builder.AddValueRaw(assetRefString);
+                    return true;
                 }
             }
 

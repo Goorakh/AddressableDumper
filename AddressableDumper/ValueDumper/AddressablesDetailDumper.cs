@@ -1,4 +1,6 @@
-﻿using AddressableDumper.ValueDumper.Serialization;
+﻿using AddressableDumper.Utils;
+using AddressableDumper.Utils.Extensions;
+using AddressableDumper.ValueDumper.Serialization;
 using Newtonsoft.Json;
 using RoR2;
 using System;
@@ -12,7 +14,7 @@ namespace AddressableDumper.ValueDumper
 {
     static class AddressablesDetailDumper
     {
-        static readonly string _addressablesDumpPath = System.IO.Path.Combine(Main.PersistentSaveDataDirectory, "values_dump");
+        static readonly string _addressablesDumpPath = Path.Combine(Main.PersistentSaveDataDirectory, "values_dump");
 
         [ConCommand(commandName = "dump_addressable_values")]
         static void CCDumpAddressableValues(ConCommandArgs args)
@@ -22,24 +24,58 @@ namespace AddressableDumper.ValueDumper
                 Directory.Delete(_addressablesDumpPath, true);
             }
 
-            AssetInfo[] assetInfos = AddressablesIterator.GetAllAssets();
-
-            foreach (AssetInfo assetInfo in assetInfos)
+            foreach (AssetInfo assetInfo in AddressablesIterator.GetAllAssetsFlattened())
             {
-                FilePath dumpFilePath = $"{Path.Combine(_addressablesDumpPath, $"{assetInfo.Key} ({assetInfo.AssetType.Name})")}.txt";
+                Log.Info($"Dumping asset values of: {assetInfo.Key} ({assetInfo.AssetType.Name})");
+
+                string sanitizedFilePath = $"{assetInfo.Key} ({assetInfo.AssetType.Name})";
+
+                {
+                    int lastBracketStartIndex = sanitizedFilePath.LastIndexOf('[');
+
+                    // exclude 0 from the 'valid range' path since that would result in a startIndex of -1
+                    int directorySeparatorSearchEnd = lastBracketStartIndex > 0 ? lastBracketStartIndex - 1 : sanitizedFilePath.Length - 1;
+
+                    // LastIndexOf 'startIndex' is actually the END index of the search range since it searches backwards
+                    int lastDirectorySeparatorIndex = sanitizedFilePath.LastIndexOf('/', directorySeparatorSearchEnd);
+                    if (lastDirectorySeparatorIndex >= 0)
+                    {
+                        sanitizedFilePath = sanitizedFilePath.ReplaceCharsFast(PathUtils.OrderedInvalidFileNameChars, '_', lastDirectorySeparatorIndex + 1);
+                    }
+                }
+
+                FilePath dumpFilePath = $"{Path.Combine(_addressablesDumpPath, sanitizedFilePath)}.txt";
+
+                const int MaxPathLength = 260;
+                if (dumpFilePath.FullPath.Length > MaxPathLength)
+                {
+                    // This is dumb
+                    int maxFileNameLength = MaxPathLength -
+                                            (dumpFilePath.DirectoryPath.Length + 1) - // include trailing / in directory
+                                            (dumpFilePath.DirectoryPath.Count(c => c == '\\') + 1) - // double count backslashes for some reason
+                                            dumpFilePath.FileExtension.Length -
+                                            1; // null terminator
+                    if (maxFileNameLength <= 0)
+                    {
+                        throw new IndexOutOfRangeException("This operating system fucking sucks man");
+                    }
+
+                    dumpFilePath.FileNameWithoutExtension = dumpFilePath.FileNameWithoutExtension.Remove(maxFileNameLength);
+                    Log.Warning("Trimming file name due to length");
+                }
+
                 FilePath originalFilePath = dumpFilePath;
 
                 Directory.CreateDirectory(dumpFilePath.DirectoryPath);
 
                 dumpFilePath.MakeUnique();
 
-                Log.Info($"Dumping asset values of '{assetInfo.Key}'");
-
                 using (FileStream fileStream = File.Open(dumpFilePath, FileMode.CreateNew, FileAccess.Write))
                 {
                     using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
                     {
                         fileWriter.WriteLine($"// Key: {assetInfo.Key}");
+                        // TODO: Add asset guid here aswell
                         fileWriter.WriteLine($"// Asset Type: {assetInfo.AssetType.FullName}");
                         fileWriter.WriteLine();
 
@@ -55,7 +91,7 @@ namespace AddressableDumper.ValueDumper
                     }
                 }
 
-                FilePath[] duplicateFiles = originalFilePath.GetAllExistingDuplicateFileNames().ToArray();
+                FilePath[] duplicateFiles = [.. originalFilePath.GetAllExistingDuplicateFileNames()];
                 if (duplicateFiles.Length > 1)
                 {
                     string[] fileContents = new string[duplicateFiles.Length];

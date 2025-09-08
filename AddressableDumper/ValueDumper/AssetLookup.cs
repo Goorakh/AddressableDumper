@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AddressableDumper.Utils.Extensions;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,16 +14,20 @@ namespace AddressableDumper.ValueDumper
 
         readonly Dictionary<string, AssetNameGrouping> _objectNameGroupings;
 
-        public AssetLookup(AssetInfo[] assetInfos)
+        public AssetLookup(IEnumerable<AssetInfo> assetInfos)
         {
-            List<AssetInfo> validAssetInfos = new List<AssetInfo>(assetInfos.Length);
+            List<AssetInfo> validAssetInfos = [];
 
-            _objectNameGroupings = new Dictionary<string, AssetNameGrouping>(assetInfos.Length, _assetNameComparer);
+            _objectNameGroupings = new Dictionary<string, AssetNameGrouping>(_assetNameComparer);
 
-            for (int i = 0; i < assetInfos.Length; i++)
+            if (assetInfos is IList assetInfosList)
             {
-                AssetInfo assetInfo = assetInfos[i];
+                validAssetInfos.EnsureCapacity(assetInfosList.Count);
+                _objectNameGroupings.EnsureCapacity(assetInfosList.Count);
+            }
 
+            foreach (AssetInfo assetInfo in assetInfos)
+            {
                 //Log.Info($"Caching assets: {i + 1}/{assetInfos.Length}");
 
                 // Assets in the "root" seem to be just template assets, so don't include them in the cache

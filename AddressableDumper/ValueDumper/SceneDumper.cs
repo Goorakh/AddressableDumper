@@ -1,4 +1,5 @@
-﻿using AddressableDumper.Utils.Extensions;
+﻿using AddressableDumper.Utils;
+using AddressableDumper.Utils.Extensions;
 using AddressableDumper.ValueDumper.Serialization;
 using HarmonyLib;
 using Mono.Cecil;
@@ -293,7 +294,7 @@ namespace AddressableDumper.ValueDumper
                         bool requiresSplit = false;
 
                         GameObject rootObject = rootObjects[i];
-                        string fileName = rootObject.name.FilterChars(Path.GetInvalidFileNameChars());
+                        string fileName = rootObject.name.FilterCharsFast(PathUtils.OrderedInvalidFileNameChars);
 
                         FilePath objectDumpPath = Path.Combine(rootFilePath, $"{i} -- {fileName}.txt");
                         objectDumpPath.MakeUnique();

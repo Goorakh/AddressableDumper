@@ -11,7 +11,7 @@ namespace AddressableDumper.ValueDumper
         {
             readonly get
             {
-                return Path.GetDirectoryName(FullPath);
+                return Path.GetDirectoryName(FullPath) ?? string.Empty;
             }
             set
             {

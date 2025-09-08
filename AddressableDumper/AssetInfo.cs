@@ -3,45 +3,74 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 
 namespace AddressableDumper
 {
-    public readonly struct AssetInfo : IComparable<AssetInfo>
+    public class AssetInfo : IComparable<AssetInfo>
     {
         public readonly IResourceLocation Location;
 
         public readonly string ObjectName;
 
-        public readonly string Key;
-        public readonly Type AssetType;
+        public readonly AssetInfo[] SubAssets;
 
-        public UnityEngine.Object Asset => FixedAddressableLoad.LoadAsset(Location);
+        bool _hasCachedAsset;
+        UnityEngine.Object _cachedAsset;
 
-        public AssetInfo(IResourceLocation location, string objectName)
+        public UnityEngine.Object Asset
+        {
+            get
+            {
+                if (!_hasCachedAsset)
+                {
+                    _cachedAsset = FixedAddressableLoad.LoadAsset(Location);
+                    _hasCachedAsset = true;
+                }
+
+                return _cachedAsset;
+            }
+        }
+
+        public string Key => Location?.PrimaryKey ?? string.Empty;
+
+        public Type AssetType => Location?.ResourceType;
+
+        public AssetInfo(IResourceLocation location, string objectName, AssetInfo[] subAssets)
         {
             Location = location;
 
             ObjectName = objectName;
 
-            Key = Location.PrimaryKey;
-            AssetType = Location.ResourceType;
+            SubAssets = subAssets;
         }
 
-        public AssetInfo(IResourceLocation location) : this(location, FixedAddressableLoad.LoadAsset(location)?.name)
+        public AssetInfo(IResourceLocation location, AssetInfo[] subAssets)
         {
+            Location = location;
+
+            string objectName = string.Empty;
+            if (Asset)
+            {
+                objectName = Asset.name;
+            }
+
+            ObjectName = objectName;
+
+            SubAssets = subAssets;
         }
 
         public override string ToString()
         {
-            return Key;
+            return $"{Key} ({AssetType?.FullName})";
         }
 
-        public readonly int CompareTo(AssetInfo other)
+        public int CompareTo(AssetInfo other)
         {
-            int keyComparison = Key.CompareTo(other.Key);
-            if (keyComparison == 0)
-            {
-                return AssetType.AssemblyQualifiedName.CompareTo(other.AssetType.AssemblyQualifiedName);
-            }
+            if (other is null)
+                return 1;
 
-            return keyComparison;
+            int keyComparison = string.Compare(Key, other.Key);
+            if (keyComparison != 0)
+                return keyComparison;
+
+            return string.Compare(AssetType.AssemblyQualifiedName, other.AssetType.AssemblyQualifiedName);
         }
     }
 }

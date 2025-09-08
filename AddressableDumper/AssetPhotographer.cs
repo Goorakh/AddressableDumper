@@ -44,7 +44,7 @@ namespace AddressableDumper
                 int lastSlashIndex = key.LastIndexOf('/');
                 if (lastSlashIndex > 0)
                 {
-                    Directory = key.Substring(0, lastSlashIndex).FilterChars(System.IO.Path.GetInvalidPathChars());
+                    Directory = key.Substring(0, lastSlashIndex).FilterCharsFast(PathUtils.OrderedInvalidPathChars);
                     assetName = key.Remove(0, lastSlashIndex + 1);
                 }
                 else
@@ -56,7 +56,7 @@ namespace AddressableDumper
                 int assetNameDotIndex = assetName.LastIndexOf('.');
                 if (assetNameDotIndex > 0)
                 {
-                    Name = assetName.Substring(0, assetNameDotIndex).FilterChars(System.IO.Path.GetInvalidFileNameChars());
+                    Name = assetName.Substring(0, assetNameDotIndex).FilterCharsFast(PathUtils.OrderedInvalidFileNameChars);
                 }
                 else
                 {
@@ -84,7 +84,7 @@ namespace AddressableDumper
 
             yield return new WaitForEndOfFrame();
 
-            foreach (IGrouping<string, AssetPathInfo> assetsByPath in from asset in AddressablesIterator.GetAllAssets()
+            foreach (IGrouping<string, AssetPathInfo> assetsByPath in from asset in AddressablesIterator.GetAllAssetsFlattened()
                                                                       select new AssetPathInfo(asset) into assetPath
                                                                       group assetPath by assetPath.Directory)
             {
