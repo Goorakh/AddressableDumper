@@ -19,6 +19,11 @@ namespace AddressableDumper.ValueDumper
         [ConCommand(commandName = "dump_addressable_values")]
         static void CCDumpAddressableValues(ConCommandArgs args)
         {
+            if (!AddressablesIterator.HasLoadedAssets)
+            {
+                AddressablesIterator.RefreshCache();
+            }
+
             if (Directory.Exists(_addressablesDumpPath))
             {
                 Directory.Delete(_addressablesDumpPath, true);

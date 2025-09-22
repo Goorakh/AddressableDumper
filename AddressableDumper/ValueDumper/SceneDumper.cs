@@ -36,6 +36,11 @@ namespace AddressableDumper.ValueDumper
         [ConCommand(commandName = "dump_scenes")]
         static void CCDumpScenes(ConCommandArgs args)
         {
+            if (!AddressablesIterator.HasLoadedAssets)
+            {
+                AddressablesIterator.RefreshCache();
+            }
+
             if (_currentScenesDump == null || _currentScenesDump.IsDisposed)
             {
                 _currentScenesDump = new ScenesDumperOperation();

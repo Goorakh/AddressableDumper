@@ -37,6 +37,8 @@ namespace AddressableDumper
 
         static IResourceLocation[] _sceneLocations = [];
 
+        public static bool HasLoadedAssets => _allAssetInfos != null && _allAssetInfos.Length > 0;
+
         static bool isValidAsset(Type assetType)
         {
             return typeof(UnityEngine.Object).IsAssignableFrom(assetType);
@@ -206,10 +208,10 @@ namespace AddressableDumper
         [ConCommand(commandName = "refresh_addressables_key_cache")]
         static void CCRefreshCache(ConCommandArgs args)
         {
-            refreshCache();
+            RefreshCache();
         }
 
-        static void refreshCache()
+        public static void RefreshCache()
         {
             Log.Info("Refreshing keys cache...");
 
