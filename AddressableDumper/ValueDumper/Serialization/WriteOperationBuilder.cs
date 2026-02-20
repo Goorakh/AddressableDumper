@@ -1,14 +1,15 @@
-﻿using System;
+﻿using HG;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
-    public sealed class WriteOperationBuilder : IList<WriteOperation>, IWriteOperationBuilderWriter
+    public sealed class WriteOperationBuilder : IList<WriteOperation>, IWriteOperationBuilderWriter, IDisposable
     {
         readonly IWriteOperationBuilderWriter _output;
 
-        readonly List<WriteOperation> _operations = [];
+        List<WriteOperation> _operations = ListPool<WriteOperation>.RentCollection();
 
         public bool AutoFlush { get; set; } = true;
 
@@ -197,6 +198,14 @@ namespace AddressableDumper.ValueDumper.Serialization
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+
+        public void Dispose()
+        {
+            if (_operations != null)
+            {
+                _operations = ListPool<WriteOperation>.ReturnCollection(_operations);
+            }
         }
     }
 }

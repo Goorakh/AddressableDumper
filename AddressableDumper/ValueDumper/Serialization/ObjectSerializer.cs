@@ -58,14 +58,15 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         static readonly IFormatProvider _formatProvider = new DumpedValueFormatter();
 
-        readonly IHashProvider _hashProvider = new DumpedValueHasher();
+        readonly DumpedValueHasher _hashProvider = new DumpedValueHasher();
 
         readonly JsonWriter _writer;
         readonly object _rootValue;
 
-        readonly Stack<SerializingObjectStep> _serializingObjectStack = [];
+        SerializingObjectStep[] _serializingObjectStack = new SerializingObjectStep[128];
+        int _serializingObjectStackCount = 0;
 
-        bool isSerializingRootValue => _serializingObjectStack.Count <= 1;
+        bool isSerializingRootValue => _serializingObjectStackCount <= 1;
 
         public Scene? SerializingScene { get; set; }
 
@@ -94,7 +95,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         void writeValue(object value, in ObjectSerializationArgs serializationArgs)
         {
-            WriteOperationBuilder builder = new WriteOperationBuilder(new JsonWriteOperationBuilderWriter(_writer));
+            using WriteOperationBuilder builder = new WriteOperationBuilder(new JsonWriteOperationBuilderWriter(_writer));
 
             try
             {
@@ -126,8 +127,9 @@ namespace AddressableDumper.ValueDumper.Serialization
         bool buildWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
             // TODO: This does not detect recursive references in value types
-            foreach (SerializingObjectStep step in _serializingObjectStack)
+            for (int i = _serializingObjectStackCount - 1; i >= 0; i--)
             {
+                ref readonly SerializingObjectStep step = ref _serializingObjectStack[i];
                 if (ReferenceEquals(step.Value, value))
                 {
                     builder.AddNull($"Recursive reference ({value})");
@@ -141,16 +143,22 @@ namespace AddressableDumper.ValueDumper.Serialization
                 return false;
             }
 
-            _serializingObjectStack.Push(new SerializingObjectStep(value));
+            if (_serializingObjectStack.Length == _serializingObjectStackCount)
+            {
+                Array.Resize(ref _serializingObjectStack, _serializingObjectStack.Length * 2);
+                Log.Warning($"Reallocated object stack ({_serializingObjectStack.Length} elements), consider increasing initial capacity.");
+            }
+
+            _serializingObjectStack[_serializingObjectStackCount++] = new SerializingObjectStep(value);
 
             bool anythingWritten = buildWrite(value, builder, serializationArgs);
 
-            if (_serializingObjectStack.Count == 0 || !ReferenceEquals(_serializingObjectStack.Peek().Value, value))
+            if (_serializingObjectStackCount == 0 || !ReferenceEquals(_serializingObjectStack[_serializingObjectStackCount - 1].Value, value))
             {
-                throw new Exception($"Invalid state, expected {value} at top of stack, found {(_serializingObjectStack.Count == 0 ? "nothing" : _serializingObjectStack.Peek())}");
+                throw new Exception($"Invalid state, expected {value} at top of stack, found {(_serializingObjectStackCount == 0 ? "nothing" : _serializingObjectStack[_serializingObjectStackCount - 1])}");
             }
 
-            _serializingObjectStack.Pop();
+            _serializingObjectStackCount--;
             return anythingWritten;
 
             bool buildWrite(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
@@ -384,7 +392,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             if (!type.IsSerializable)
                 return false;
 
-            WriteOperationBuilder serializedObjectBuilder = new WriteOperationBuilder(builder)
+            using WriteOperationBuilder serializedObjectBuilder = new WriteOperationBuilder(builder)
             {
                 AutoFlushCapacity = builder.AutoFlushCapacity,
                 AutoFlush = false,
@@ -451,7 +459,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
         bool tryBuildPropertyWithValueWriteOperation(string propertyName, object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
         {
-            WriteOperationBuilder propertyValueBuilder = new WriteOperationBuilder(builder)
+            using WriteOperationBuilder propertyValueBuilder = new WriteOperationBuilder(builder)
             {
                 AutoFlush = false,
                 AutoFlushCapacity = builder.AutoFlushCapacity,
@@ -995,7 +1003,7 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             if (childOrder is ICollection collection)
             {
-                childIndexNames.Capacity = collection.Count;
+                childIndexNames.EnsureCapacity(collection.Count);
             }
 
             if (!string.IsNullOrEmpty(rootName))
@@ -1051,7 +1059,8 @@ namespace AddressableDumper.ValueDumper.Serialization
             bool appendComponentType = obj != assetKey;
             bool foundAsset = false;
 
-            Stack<Transform> childPathStack = new Stack<Transform>();
+            using var _ = ListPool<Transform>.RentCollection(out List<Transform> childPath);
+            childPath.EnsureCapacity(16);
 
             do
             {
@@ -1059,10 +1068,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                 {
                     stringBuilder.Append($"assetref<{assetInfo.AssetType.FullName}>('{assetInfo.Key}')");
 
-                    if (childPathStack.Count > 0)
+                    if (childPath.Count > 0)
                     {
                         stringBuilder.Append('.');
-                        addObjectRefPath(stringBuilder, childPathStack, null);
+                        addObjectRefPath(stringBuilder, childPath, null);
                     }
 
                     foundAsset = true;
@@ -1070,10 +1079,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                 }
 
                 assetKeyGameObject = assetKey as GameObject;
-
+                
                 if (assetKeyGameObject)
                 {
-                    childPathStack.Push(assetKeyGameObject.transform);
+                    childPath.Insert(0, assetKeyGameObject.transform);
                 }
 
             } while (assetKeyGameObject && (assetKey = assetKeyGameObject.transform.parent?.gameObject));
@@ -1166,16 +1175,17 @@ namespace AddressableDumper.ValueDumper.Serialization
                         return false;
                     }
 
-                    Stack<Transform> childPathStack = new Stack<Transform>();
+                    using var _ = ListPool<Transform>.RentCollection(out List<Transform> childPath);
+                    childPath.EnsureCapacity(16);
 
                     for (Transform current = transform; current != root; current = current.parent)
                     {
-                        childPathStack.Push(current);
+                        childPath.Insert(0, current);
                     }
 
                     StringBuilder stringBuilder = HG.StringBuilderPool.RentStringBuilder();
 
-                    addObjectRefPath(stringBuilder, childPathStack, root.name);
+                    addObjectRefPath(stringBuilder, childPath, root.name);
 
                     stringBuilder.Append('.');
 
@@ -1197,11 +1207,10 @@ namespace AddressableDumper.ValueDumper.Serialization
                     }
                 }
 
-                SerializingObjectStep[] serializingSteps = _serializingObjectStack.ToArray();
-                // Skip currently serializing object (obj) at index 0
-                for (int i = serializingSteps.Length - 1; i > 0; i--)
+                // Skip currently serializing object (obj) at the end of the array
+                for (int i = 0; i < _serializingObjectStackCount - 1; i++)
                 {
-                    SerializingObjectStep step = serializingSteps[i];
+                    ref readonly SerializingObjectStep step = ref _serializingObjectStack[i];
 
                     if (ReferenceEquals(step.Value, obj))
                         continue;

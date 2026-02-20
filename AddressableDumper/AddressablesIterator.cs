@@ -30,10 +30,12 @@ namespace AddressableDumper
 
         static readonly string _addressablesKeysDumpPath = Path.Combine(Main.PersistentSaveDataDirectory, "keys_dump.txt");
 
+        static readonly string _ror2VersionString = $"{Application.version}#{typeof(AutomatedBuildVersion).GetField(nameof(AutomatedBuildVersion.buildVersionString))?.GetValue(null)}";
+
         static AssetInfo[] _allAssetInfos = [];
 
-        static IReadOnlyDictionary<UnityEngine.Object, AssetInfo> _assetInfoLookup;
-        public static IReadOnlyDictionary<UnityEngine.Object, AssetInfo> AssetInfoLookup => _assetInfoLookup ??= new AssetLookup(GetAllAssetsFlattened());
+        static AssetLookup _assetInfoLookup;
+        public static AssetLookup AssetInfoLookup => _assetInfoLookup ??= new AssetLookup(GetAllAssetsFlattened());
 
         static IResourceLocation[] _sceneLocations = [];
 
@@ -64,14 +66,13 @@ namespace AddressableDumper
         {
             Directory.CreateDirectory(_addressablesCachePath);
 
-            string currentVersion = Application.version;
             const string CurrentModVersion = Main.PluginVersion;
 
             bool refresh = false;
             if (File.Exists(_addressablesCacheVersionPath))
             {
                 string cacheVersion = File.ReadAllText(_addressablesCacheVersionPath).Trim();
-                refresh |= cacheVersion != currentVersion;
+                refresh |= cacheVersion != _ror2VersionString;
             }
             else
             {
@@ -347,7 +348,7 @@ namespace AddressableDumper
             }
 
             File.WriteAllLines(_addressablesKeysDumpPath, _allAssetInfos.Select(a => $"{a.Key}\t\t({a.AssetType?.FullName ?? "null"})"));
-            File.WriteAllText(_addressablesCacheVersionPath, Application.version);
+            File.WriteAllText(_addressablesCacheVersionPath, _ror2VersionString);
             File.WriteAllText(_cachedModVersionPath, Main.PluginVersion);
         }
     }
