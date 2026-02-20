@@ -103,9 +103,7 @@
 	<Copy SourceFiles="@(LangFiles)" DestinationFolder="$(TSPackagePluginDir)/lang/%(RecursiveDir)" />
 
 	<Copy SourceFiles="$(OutDir)/$(AssemblyName).dll" DestinationFolder="$(TSPackagePluginDir)" />
-
-	<Copy SourceFiles="$(OutDir)/$(AssemblyName).pdb" DestinationFolder="$(TSPackagePluginDir)" Condition="'$(Configuration)'=='Debug'" />
-	<Delete Files="$(TSPackagePluginDir)/$(AssemblyName).pdb" Condition="'$(Configuration)'=='Release'" />
+	<Copy SourceFiles="$(OutDir)/$(AssemblyName).pdb" DestinationFolder="$(TSPackagePluginDir)" />
 
 	<ZipDirectory SourceDirectory="$(TSPackageDir)" DestinationFile="$(BuildDir)/$(SolutionName).zip" Overwrite="true" />
   </Target>
