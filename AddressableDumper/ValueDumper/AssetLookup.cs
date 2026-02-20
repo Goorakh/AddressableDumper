@@ -20,10 +20,10 @@ namespace AddressableDumper.ValueDumper
 
             _objectNameGroupings = new Dictionary<string, AssetNameGrouping>(_assetNameComparer);
 
-            if (assetInfos is IList assetInfosList)
+            if (assetInfos is ICollection assetInfosCollection)
             {
-                validAssetInfos.EnsureCapacity(assetInfosList.Count);
-                _objectNameGroupings.EnsureCapacity(assetInfosList.Count);
+                validAssetInfos.EnsureCapacity(assetInfosCollection.Count);
+                _objectNameGroupings.EnsureCapacity(assetInfosCollection.Count);
             }
 
             foreach (AssetInfo assetInfo in assetInfos)
@@ -68,7 +68,7 @@ namespace AddressableDumper.ValueDumper
 
             Log.Info($"Split {validAssetInfos.Count} assets into {_objectNameGroupings.Count} named groups");
 
-            _assets = validAssetInfos.ToArray();
+            _assets = [.. validAssetInfos];
         }
 
         public AssetInfo this[UnityEngine.Object key]

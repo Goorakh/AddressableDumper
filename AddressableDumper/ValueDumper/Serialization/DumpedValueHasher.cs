@@ -169,11 +169,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             if (type.IsSerializable)
             {
-                foreach (MemberInfo member in ReflectionUtils.GetSerializableMembers(type, MemberTypes.Field, BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                foreach (FieldInfo field in ReflectionUtils.GetSerializableFields(type))
                 {
-                    if (member is not FieldInfo field)
-                        throw new NotImplementedException($"{member} is not implemented");
-
                     writeValue(writer, field.GetValue(value));
                 }
 

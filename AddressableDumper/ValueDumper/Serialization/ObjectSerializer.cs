@@ -1,5 +1,6 @@
 ﻿using AddressableDumper.Utils;
 using AddressableDumper.Utils.Extensions;
+using HG;
 using Newtonsoft.Json;
 using RoR2;
 using RoR2.Navigation;
@@ -16,6 +17,8 @@ using UnityEngine.AddressableAssets;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
+
+using Convert = System.Convert;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
@@ -391,7 +394,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             buildTypeFieldWriteOperation(type, serializedObjectBuilder, serializationArgs);
 
-            List<Type> hierarchyTypes = ReflectionUtils.GetHierarchyTypes(type);
+            using var _ = ListPool<Type>.RentCollection(out List<Type> hierarchyTypes);
+            ReflectionUtils.GetHierarchyTypes(type, hierarchyTypes);
             hierarchyTypes.Reverse();
 
             bool anyFieldWritten = false;
@@ -399,13 +403,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             foreach (Type baseType in hierarchyTypes)
             {
-                const BindingFlags FLAGS = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
-
-                foreach (MemberInfo member in ReflectionUtils.GetSerializableMembers(baseType, MemberTypes.Field, FLAGS))
+                foreach (FieldInfo field in ReflectionUtils.GetSerializableFields(baseType))
                 {
-                    if (member is not FieldInfo field)
-                        throw new NotImplementedException($"Member type {member.MemberType} ({member}) is not implemented");
-
                     anyFieldWriteAttempted = true;
 
                     object fieldValue;
@@ -992,7 +991,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 appendedAnyObjectPath = true;
             }
 
-            List<string> childIndexNames = [];
+            using var _ = ListPool<string>.RentCollection(out List<string> childIndexNames);
 
             if (childOrder is ICollection collection)
             {
@@ -1538,7 +1537,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                     builder.AddStartArray();
 
-                    for (int i = 0; i < material.passCount; i++)
+                    int passCount = material.passCount;
+                    for (int i = 0; i < passCount; i++)
                     {
                         builder.AddValue(material.GetPassName(i));
                     }
@@ -1626,7 +1626,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             Type type = value.GetType();
 
-            List<Type> hierarchyTypes = ReflectionUtils.GetHierarchyTypes(type);
+            using var _ = ListPool<Type>.RentCollection(out List<Type> hierarchyTypes);
+            ReflectionUtils.GetHierarchyTypes(type, hierarchyTypes);
             hierarchyTypes.Reverse();
 
             foreach (Type baseType in hierarchyTypes)
@@ -1635,11 +1636,7 @@ namespace AddressableDumper.ValueDumper.Serialization
                 if (serializationContext.Skip)
                     continue;
 
-                const BindingFlags FLAGS = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
-
-                MemberTypes memberTypes = serializationContext.MemberTypesToSerialize;
-
-                MemberInfo[] members = ReflectionUtils.GetSerializableMembers(baseType, memberTypes, FLAGS).ToArray();
+                MemberInfo[] members = ReflectionUtils.GetSerializableMembers(baseType, serializationContext.MemberTypesToSerialize);
 
                 foreach (MemberInfo member in members)
                 {

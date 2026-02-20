@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace AddressableDumper.ValueDumper.Serialization
+﻿namespace AddressableDumper.ValueDumper.Serialization
 {
     public interface IHashProvider
     {

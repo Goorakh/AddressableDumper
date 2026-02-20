@@ -1,6 +1,7 @@
-﻿using System;
+﻿using AddressableDumper.Utils.Extensions;
+using HG;
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -8,49 +9,149 @@ namespace AddressableDumper.Utils
 {
     public static class ReflectionUtils
     {
-        public static List<Type> GetHierarchyTypes(Type type)
-        {
-            List<Type> baseTypes = [];
+        static readonly Dictionary<Type, MemberInfo[]> _cachedSerializableMembers = [];
+        static readonly Dictionary<Type, FieldInfo[]> _cachedSerializableFields = [];
+        static readonly Dictionary<Type, PropertyInfo[]> _cachedSerializableProperties = [];
 
+        public static void GetHierarchyTypes(Type type, List<Type> hierarchyTypes)
+        {
             do
             {
-                baseTypes.Add(type);
+                hierarchyTypes.Add(type);
                 type = type.BaseType;
             } while (type != null);
-
-            return baseTypes;
         }
 
-        public static IEnumerable<MemberInfo> GetSerializableMembers(Type declaringType, MemberTypes memberTypes, BindingFlags bindingFlags)
+        public static MemberInfo[] GetSerializableMembers(Type declaringType, MemberTypes memberTypes)
+        {
+            return memberTypes switch
+            {
+                MemberTypes.Field => GetSerializableFields(declaringType),
+                MemberTypes.Property => GetSerializableProperties(declaringType),
+                MemberTypes.Field | MemberTypes.Property => GetSerializableMembers(declaringType),
+                _ => throw new NotImplementedException($"Member types {memberTypes} is not implemented"),
+            };
+        }
+
+        public static MemberInfo[] GetSerializableMembers(Type declaringType)
         {
             if (declaringType is null)
                 throw new ArgumentNullException(nameof(declaringType));
 
-            return declaringType.GetMembers(bindingFlags).Where(member =>
+            if (!_cachedSerializableMembers.TryGetValue(declaringType, out MemberInfo[] serializableMembers))
             {
-                if ((member.MemberType & memberTypes) == 0)
-                    return false;
-
-                if (member is FieldInfo field)
+                MemberInfo[] allMembers = declaringType.GetMembers(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (allMembers.Length > 0)
                 {
-                    if (field.GetCustomAttribute(typeof(NonSerializedAttribute)) != null)
-                        return false;
+                    using var _ = ListPool<MemberInfo>.RentCollection(out List<MemberInfo> serializableMembersList);
+                    serializableMembersList.EnsureCapacity(allMembers.Length);
 
-                    if (!field.IsPublic && field.GetCustomAttribute(typeof(SerializeField)) == null)
-                        return false;
+                    foreach (MemberInfo member in allMembers)
+                    {
+                        if (member is FieldInfo field)
+                        {
+                            if (field.GetCustomAttribute(typeof(NonSerializedAttribute)) != null)
+                                continue;
+
+                            if (!field.IsPublic && field.GetCustomAttribute(typeof(SerializeField)) == null)
+                                continue;
+                        }
+                        else if (member is PropertyInfo property)
+                        {
+                            if (property.GetIndexParameters().Length > 0)
+                                continue;
+
+                            MethodInfo getMethod = property.GetMethod;
+                            if (getMethod == null || !getMethod.IsPublic)
+                                continue;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                        serializableMembersList.Add(member);
+                    }
+
+                    serializableMembers = [.. serializableMembersList];
                 }
-                else if (member is PropertyInfo property)
+                else
                 {
-                    if (property.GetIndexParameters().Length > 0)
-                        return false;
-
-                    MethodInfo getMethod = property.GetMethod;
-                    if (getMethod == null || !getMethod.IsPublic)
-                        return false;
+                    serializableMembers = [];
                 }
 
-                return true;
-            });
+                _cachedSerializableMembers.Add(declaringType, serializableMembers);
+            }
+
+            return serializableMembers;
+        }
+
+        public static FieldInfo[] GetSerializableFields(Type declaringType)
+        {
+            if (declaringType is null)
+                throw new ArgumentNullException(nameof(declaringType));
+
+            if (!_cachedSerializableFields.TryGetValue(declaringType, out FieldInfo[] serializableFields))
+            {
+                MemberInfo[] serializableMembers = GetSerializableMembers(declaringType);
+                if (serializableMembers.Length > 0)
+                {
+                    using var _ = ListPool<FieldInfo>.RentCollection(out List<FieldInfo> serializableFieldsList);
+                    serializableFieldsList.EnsureCapacity(serializableMembers.Length);
+
+                    foreach (MemberInfo member in serializableMembers)
+                    {
+                        if (member is FieldInfo field)
+                        {
+                            serializableFieldsList.Add(field);
+                        }
+                    }
+
+                    serializableFields = [.. serializableFieldsList];
+                }
+                else
+                {
+                    serializableFields = [];
+                }
+
+                _cachedSerializableFields.Add(declaringType, serializableFields);
+            }
+
+            return serializableFields;
+        }
+
+        public static PropertyInfo[] GetSerializableProperties(Type declaringType)
+        {
+            if (declaringType is null)
+                throw new ArgumentNullException(nameof(declaringType));
+
+            if (!_cachedSerializableProperties.TryGetValue(declaringType, out PropertyInfo[] serializableProperties))
+            {
+                MemberInfo[] serializableMembers = GetSerializableMembers(declaringType);
+                if (serializableMembers.Length > 0)
+                {
+                    using var _ = ListPool<PropertyInfo>.RentCollection(out List<PropertyInfo> serializablePropertiesList);
+                    serializablePropertiesList.EnsureCapacity(serializableMembers.Length);
+
+                    foreach (MemberInfo member in serializableMembers)
+                    {
+                        if (member is PropertyInfo field)
+                        {
+                            serializablePropertiesList.Add(field);
+                        }
+                    }
+
+                    serializableProperties = [.. serializablePropertiesList];
+                }
+                else
+                {
+                    serializableProperties = [];
+                }
+
+                _cachedSerializableProperties.Add(declaringType, serializableProperties);
+            }
+
+            return serializableProperties;
         }
     }
 }

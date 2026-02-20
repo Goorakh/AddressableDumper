@@ -4,6 +4,7 @@ using AddressableDumper.ValueDumper.Serialization;
 using Newtonsoft.Json;
 using RoR2;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -28,6 +29,9 @@ namespace AddressableDumper.ValueDumper
             {
                 Directory.Delete(_addressablesDumpPath, true);
             }
+
+            TimeSpan totalElapsed = TimeSpan.Zero;
+            int totalAssets = 0;
 
             foreach (AssetInfo assetInfo in AddressablesIterator.GetAllAssetsFlattened())
             {
@@ -75,6 +79,8 @@ namespace AddressableDumper.ValueDumper
 
                 dumpFilePath.MakeUnique();
 
+                Stopwatch stopwatch = Stopwatch.StartNew();
+
                 using (FileStream fileStream = File.Open(dumpFilePath, FileMode.CreateNew, FileAccess.Write))
                 {
                     using (StreamWriter fileWriter = new StreamWriter(fileStream, Encoding.UTF8, 1024, true))
@@ -112,7 +118,14 @@ namespace AddressableDumper.ValueDumper
                         File.WriteAllText(duplicateFiles[i], fileContents[i]);
                     }
                 }
+
+                totalElapsed += stopwatch.Elapsed;
+                stopwatch.Stop();
+
+                totalAssets++;
             }
+
+            Log.Info($"Dumped {totalAssets} assets in {totalElapsed} (avg {totalElapsed.TotalMilliseconds / totalAssets:F1}ms)");
         }
     }
 }
