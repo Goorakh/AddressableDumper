@@ -19,7 +19,7 @@ using UnityEngine.SceneManagement;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
-    public class ObjectSerializer
+    public sealed class ObjectSerializer
     {
         struct ObjectSerializationArgs
         {

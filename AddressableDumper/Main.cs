@@ -10,7 +10,7 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 namespace AddressableDumper
 {
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
-    public class Main : BaseUnityPlugin
+    public sealed class Main : BaseUnityPlugin
     {
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "Gorakh";

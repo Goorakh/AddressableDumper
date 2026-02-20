@@ -2,7 +2,7 @@
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
-    public class JsonWriteOperationBuilderWriter : IWriteOperationBuilderWriter
+    public sealed class JsonWriteOperationBuilderWriter : IWriteOperationBuilderWriter
     {
         readonly JsonWriter _writer;
 

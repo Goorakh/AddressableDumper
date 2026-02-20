@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
-    public class WriteOperationBuilder : IList<WriteOperation>, IWriteOperationBuilderWriter
+    public sealed class WriteOperationBuilder : IList<WriteOperation>, IWriteOperationBuilderWriter
     {
         readonly IWriteOperationBuilderWriter _output;
 

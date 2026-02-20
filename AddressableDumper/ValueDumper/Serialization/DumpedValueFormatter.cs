@@ -6,7 +6,7 @@ using UnityEngine.Networking;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
-    public class DumpedValueFormatter : IFormatProvider, ICustomFormatter
+    public sealed class DumpedValueFormatter : IFormatProvider, ICustomFormatter
     {
         public IFormatProvider BackingFormatProvider { get; set; } = CultureInfo.InvariantCulture;
 

@@ -3,7 +3,7 @@ using System;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
-    public class WriteOperation
+    public sealed class WriteOperation
     {
         public WriteOperationType Type { get; }
 

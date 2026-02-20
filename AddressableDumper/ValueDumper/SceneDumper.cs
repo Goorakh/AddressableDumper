@@ -111,7 +111,7 @@ namespace AddressableDumper.ValueDumper
             }
         }
 
-        class ScenesDumperOperation : IDisposable
+        sealed class ScenesDumperOperation : IDisposable
         {
             IEnumerator<SceneInfo> _sceneInfoIterator;
 
@@ -215,7 +215,7 @@ namespace AddressableDumper.ValueDumper
             }
         }
 
-        class SceneInfo
+        sealed class SceneInfo
         {
             public readonly IResourceLocation ResourceLocation;
 

@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace AddressableDumper.Utils
 {
-    public class TemporaryTexture(Texture2D texture, bool isTemporary) : IDisposable
+    public sealed class TemporaryTexture(Texture2D texture, bool isTemporary) : IDisposable
     {
         public readonly Texture2D Texture = texture;
 

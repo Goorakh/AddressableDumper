@@ -11,7 +11,7 @@ using UnityEngine.Rendering;
 
 namespace AddressableDumper.ValueDumper.Serialization
 {
-    public class DumpedValueHasher : IHashProvider
+    public sealed class DumpedValueHasher : IHashProvider
     {
         static readonly HashAlgorithm _sharedHasher;
         static readonly MemoryStream _sharedMemoryStream;

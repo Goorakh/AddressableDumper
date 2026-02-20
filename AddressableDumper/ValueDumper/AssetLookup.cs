@@ -6,7 +6,7 @@ using System.Linq;
 
 namespace AddressableDumper.ValueDumper
 {
-    public class AssetLookup : IReadOnlyDictionary<UnityEngine.Object, AssetInfo>
+    public sealed class AssetLookup : IReadOnlyDictionary<UnityEngine.Object, AssetInfo>
     {
         static readonly StringComparer _assetNameComparer = StringComparer.Ordinal;
 
@@ -133,7 +133,7 @@ namespace AddressableDumper.ValueDumper
             return GetEnumerator();
         }
 
-        class AssetNameGrouping
+        sealed class AssetNameGrouping
         {
             public string ObjectName { get; }
 

@@ -3,7 +3,7 @@ using UnityEngine.ResourceManagement.ResourceLocations;
 
 namespace AddressableDumper
 {
-    public class AssetInfo : IComparable<AssetInfo>
+    public sealed class AssetInfo : IComparable<AssetInfo>
     {
         public readonly IResourceLocation Location;
 
