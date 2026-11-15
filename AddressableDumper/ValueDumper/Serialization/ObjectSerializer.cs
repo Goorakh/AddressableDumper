@@ -1,8 +1,10 @@
 ﻿using AddressableDumper.Utils;
 using AddressableDumper.Utils.Extensions;
 using HG;
+using HG.GeneralSerializer;
 using Newtonsoft.Json;
 using RoR2;
+using RoR2.AsyncManagement;
 using RoR2.Navigation;
 using RoR2.Projectile;
 using System;
@@ -35,6 +37,8 @@ namespace AddressableDumper.ValueDumper.Serialization
         {
             public readonly object Value;
 
+            public readonly Type Type;
+
             public readonly UnityEngine.Object AsUnityObject;
 
             public readonly Transform RootTransform;
@@ -42,6 +46,7 @@ namespace AddressableDumper.ValueDumper.Serialization
             public SerializingObjectStep(object value)
             {
                 Value = value;
+                Type = value?.GetType();
 
                 if (Value is UnityEngine.Object unityObject)
                 {
@@ -1113,42 +1118,104 @@ namespace AddressableDumper.ValueDumper.Serialization
             return foundAsset;
         }
 
-        WriteOperationResult buildAssetReferenceWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
+        bool isSerializingEntityStateGameObjectAssetReference()
         {
-            if (value is not AssetReference assetReference)
-                return WriteOperationResult.Unhandled;
+            ReadOnlySpan<SerializingObjectStep> serializingObjectStack = _serializingObjectStack.AsSpan(0, _serializingObjectStackCount);
 
-            UnityEngine.Object asset = null;
-            if (assetReference.RuntimeKeyIsValid())
+            Type[] expectedSerializationPath = [typeof(EntityStateConfiguration), typeof(SerializedFieldCollection), typeof(SerializedField[]), typeof(SerializedField), typeof(SerializedValue)];
+            if (expectedSerializationPath.Length > serializingObjectStack.Length)
             {
-                static bool isAssetReferenceT(Type assetReferenceType, out Type assetType)
-                {
-                    if (assetReferenceType != null)
-                    {
-                        if (assetReferenceType.IsGenericType && assetReferenceType.GetGenericTypeDefinition() == typeof(AssetReferenceT<>))
-                        {
-                            assetType = assetReferenceType.GenericTypeArguments[0];
-                            return true;
-                        }
-
-                        return isAssetReferenceT(assetReferenceType.BaseType, out assetType);
-                    }
-
-                    assetType = null;
-                    return false;
-                }
-
-                Type assetType = typeof(UnityEngine.Object);
-
-                Type assetReferenceType = assetReference.GetType();
-                if (isAssetReferenceT(assetReferenceType, out Type assetReferenceAssetType))
-                {
-                    assetType = assetReferenceAssetType;
-                }
-
-                asset = FixedAddressableLoad.LoadAsset(assetReference.RuntimeKey, assetType);
+                return false;
             }
 
+            ReadOnlySpan<SerializingObjectStep> serializingEntityStateConfigurationStack = serializingObjectStack[^expectedSerializationPath.Length..];
+            for (int i = serializingEntityStateConfigurationStack.Length - 1; i >= 0; i--)
+            {
+                if (!ReferenceEquals(serializingEntityStateConfigurationStack[i].Type, expectedSerializationPath[i]))
+                {
+                    Log.Info($"Mismatched entity state configuration serialization step at {i} ({serializingEntityStateConfigurationStack[i].Type}), expected {expectedSerializationPath[i]}");
+                    return false;
+                }
+            }
+
+            EntityStateConfiguration entityStateConfiguration = (EntityStateConfiguration)serializingEntityStateConfigurationStack[0].Value;
+            SerializedField serializedField = (SerializedField)serializingEntityStateConfigurationStack[3].Value;
+
+            Type entityStateType = entityStateConfiguration.targetType.LookupType();
+            if (entityStateType is null)
+            {
+                return false;
+            }
+
+            FieldInfo entityStateField = entityStateType.GetField(serializedField.fieldName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
+            if (entityStateField is null)
+            {
+                return false;
+            }
+
+            return ReferenceEquals(entityStateField.FieldType, typeof(EntityStateGameObject));
+        }
+
+        WriteOperationResult buildAssetReferenceWriteOperation(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
+        {
+            UnityEngine.Object asset;
+
+            switch (value)
+            {
+                case AssetReference assetReference when assetReference.RuntimeKeyIsValid():
+                {
+                    static bool isAssetReferenceT(Type assetReferenceType, out Type assetType)
+                    {
+                        if (assetReferenceType != null)
+                        {
+                            if (assetReferenceType.IsGenericType && assetReferenceType.GetGenericTypeDefinition() == typeof(AssetReferenceT<>))
+                            {
+                                assetType = assetReferenceType.GenericTypeArguments[0];
+                                return true;
+                            }
+
+                            return isAssetReferenceT(assetReferenceType.BaseType, out assetType);
+                        }
+
+                        assetType = null;
+                        return false;
+                    }
+
+                    Type assetType = typeof(UnityEngine.Object);
+
+                    Type assetReferenceType = assetReference.GetType();
+                    if (isAssetReferenceT(assetReferenceType, out Type assetReferenceAssetType))
+                    {
+                        assetType = assetReferenceAssetType;
+                    }
+
+                    asset = FixedAddressableLoad.LoadAsset(assetReference.RuntimeKey, assetType);
+                    break;
+                }
+                case SerializedValue serializedValue:
+                {
+                    if (serializedValue.objectValue)
+                    {
+                        asset = serializedValue.objectValue;
+                    }
+                    else if (!string.IsNullOrEmpty(serializedValue.stringValue) && isSerializingEntityStateGameObjectAssetReference())
+                    {
+                        asset = FixedAddressableLoad.LoadAsset(serializedValue.stringValue, typeof(GameObject));
+                    }
+                    else
+                    {
+                        asset = null;
+                    }
+
+                    break;
+                }
+                default:
+                {
+                    asset = null;
+                    break;
+                }
+            }
+            
             if (asset && tryGetAssetRefString(asset, out string assetRefString))
             {
                 builder.AddValueRaw(assetRefString);
