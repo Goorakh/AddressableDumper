@@ -5,6 +5,7 @@ using HG.GeneralSerializer;
 using Newtonsoft.Json;
 using RoR2;
 using RoR2.AsyncManagement;
+using RoR2.ContentManagement;
 using RoR2.Navigation;
 using RoR2.Projectile;
 using System;
@@ -1342,8 +1343,6 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             buildPropertyWithValueWriteOperation("activeSelf", gameObject.activeSelf, builder, serializationArgs);
 
-            buildPropertyWithValueWriteOperation("activeInHierarchy", gameObject.activeInHierarchy, builder, serializationArgs);
-
             buildPropertyWithValueWriteOperation("isStatic", gameObject.isStatic, builder, serializationArgs);
 
             buildPropertyWithValueWriteOperation("tag", gameObject.tag, builder, serializationArgs);
@@ -1912,6 +1911,28 @@ namespace AddressableDumper.ValueDumper.Serialization
                         switch (member.Name)
                         {
                             case nameof(CharacterMaster._masterIndex):
+                                continue;
+                        }
+                    }
+                    else if (baseType != typeof(BakedCatalogBaseScrob) && typeof(BakedCatalogBaseScrob).IsAssignableFrom(baseType))
+                    {
+                        memberSerializationArgs.MaxCollectionCapacity = int.MaxValue;
+                    }
+                    else if (baseType == typeof(AssetCollection))
+                    {
+                        switch (member.Name)
+                        {
+                            case nameof(AssetCollection.assets):
+                                memberSerializationArgs.MaxCollectionCapacity = int.MaxValue;
+                                break;
+                        }
+                    }
+                    else if (baseType == typeof(Behaviour))
+                    {
+                        switch (member.Name)
+                        {
+                            // activeSelf or enabled is the more important value that infers this
+                            case nameof(Behaviour.isActiveAndEnabled):
                                 continue;
                         }
                     }
