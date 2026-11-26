@@ -400,7 +400,9 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             Type type = value.GetType();
             if (!type.IsSerializable)
+            {
                 return WriteOperationResult.Unhandled;
+            }
 
             using WriteOperationBuilder serializedObjectBuilder = new WriteOperationBuilder(builder)
             {
@@ -412,65 +414,22 @@ namespace AddressableDumper.ValueDumper.Serialization
 
             buildTypeFieldWriteOperation(type, serializedObjectBuilder, serializationArgs);
 
-            using var _ = ListPool<Type>.RentCollection(out List<Type> hierarchyTypes);
-            ReflectionUtils.GetHierarchyTypes(type, hierarchyTypes);
-            hierarchyTypes.Reverse();
-
-            bool anyFieldWritten = false;
-            bool anyFieldWriteAttempted = false;
-
-            foreach (Type baseType in hierarchyTypes)
+            WriteOperationResult result = buildSerializedMemberWriteOperations(value, serializedObjectBuilder, serializationArgs, type =>
             {
-                foreach (FieldInfo field in ReflectionUtils.GetSerializableFields(baseType))
-                {
-                    anyFieldWriteAttempted = true;
-
-                    object fieldValue;
-                    try
-                    {
-                        fieldValue = field.GetValue(value);
-                    }
-                    catch (Exception e)
-                    {
-                        Log.Error_NoCallerPrefix($"Failed to get field value of {field.DeclaringType.FullName}.{field.Name}: {e}");
-
-                        serializedObjectBuilder.AddPropertyName(field.Name);
-                        serializedObjectBuilder.AddNull($"Error retrieving member value: {e.Message}");
-
-                        continue;
-                    }
-
-                    WriteOperationResult writeResult = tryBuildPropertyWithValueWriteOperation(field.Name, fieldValue, serializedObjectBuilder, serializationArgs);
-                    if (writeResult == WriteOperationResult.Succeeded)
-                    {
-                        anyFieldWritten = true;
-
-                        serializedObjectBuilder.AutoFlush = true;
-                        serializedObjectBuilder.Flush();
-                    }
-                    else if (writeResult == WriteOperationResult.Unhandled)
-                    {
-                        Log.Warning($"Failed to determine write operation for serialized field {field.DeclaringType.FullName}.{field.Name}: {fieldValue} ({field.FieldType.Name})");
-                    }
-                }
-            }
+                return new MemberSerializationContext(MemberTypes.Field,
+                                                      false,
+                                                      true,
+                                                      false);
+            }, true);
 
             serializedObjectBuilder.AddEndObject();
 
-            if (anyFieldWriteAttempted)
+            if (result == WriteOperationResult.Succeeded)
             {
-                if (anyFieldWritten)
-                {
                     serializedObjectBuilder.Flush();
-                    return WriteOperationResult.Succeeded;
                 }
-                else
-                {
-                    return WriteOperationResult.Empty;
-                }
-            }
 
-            return WriteOperationResult.Unhandled;
+            return result;
         }
 
         WriteOperationResult tryBuildPropertyWithValueWriteOperation(string propertyName, object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs)
@@ -1699,19 +1658,22 @@ namespace AddressableDumper.ValueDumper.Serialization
             }
         }
 
-        bool buildSerializedMemberWriteOperations(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs, Func<Type, MemberSerializationContext> baseTypeContextGetter)
+        WriteOperationResult buildSerializedMemberWriteOperations(object value, WriteOperationBuilder builder, in ObjectSerializationArgs serializationArgs, Func<Type, MemberSerializationContext> baseTypeContextGetter, bool autoFlushBuilder = false)
         {
             if (baseTypeContextGetter is null)
                 throw new ArgumentNullException(nameof(baseTypeContextGetter));
 
             if (value is null)
-                return false;
+                return WriteOperationResult.Empty;
 
             Type type = value.GetType();
 
             using var _ = ListPool<Type>.RentCollection(out List<Type> hierarchyTypes);
             ReflectionUtils.GetHierarchyTypes(type, hierarchyTypes);
             hierarchyTypes.Reverse();
+
+            bool anyMemberFound = false;
+            bool anyMemberWritten = false;
 
             foreach (Type baseType in hierarchyTypes)
             {
@@ -1723,6 +1685,8 @@ namespace AddressableDumper.ValueDumper.Serialization
 
                 foreach (MemberInfo member in members)
                 {
+                    anyMemberFound = true;
+
                     if (!serializationContext.IncludeObsolete && member.GetCustomAttribute(typeof(ObsoleteAttribute)) != null)
                     {
                         bool isWhitelistedDeprecated = false;
@@ -2073,25 +2037,60 @@ namespace AddressableDumper.ValueDumper.Serialization
                         }
                     }
 
+                    bool written = false;
                     if (appendValueHashInstead)
                     {
                         byte[] hashBytes = _hashProvider.ComputeHash(memberValue);
 
                         builder.AddPropertyName(member.Name);
                         builder.AddValueRaw($"valuehash('{Convert.ToBase64String(hashBytes)}')");
+
+                        written = true;
                     }
                     else
                     {
                         WriteOperationResult writeResult = tryBuildPropertyWithValueWriteOperation(member.Name, memberValue, builder, memberSerializationArgs);
-                        if (writeResult == WriteOperationResult.Unhandled)
+                        if (writeResult == WriteOperationResult.Succeeded)
+                        {
+                            written = true;
+                        }
+                        else if (writeResult == WriteOperationResult.Unhandled)
                         {
                             Log.Warning($"Failed to determine write operation for serialized {member.MemberType} {member.DeclaringType.FullName}.{member.Name}: {memberValueType.Name})");
+                        }
+                    }
+
+                    if (written)
+                    {
+                        anyMemberWritten = true;
+
+                        if (autoFlushBuilder)
+                        {
+                            builder.AutoFlush = true;
+                            builder.Flush();
                         }
                     }
                 }
             }
 
-            return true;
+            if (anyMemberFound)
+            {
+                if (anyMemberWritten)
+                {
+                    if (autoFlushBuilder)
+                    {
+                        builder.Flush();
+                    }
+
+                    return WriteOperationResult.Succeeded;
+                    }
+                else
+                {
+                    return WriteOperationResult.Empty;
+                }
+            }
+
+            return WriteOperationResult.Unhandled;
         }
     }
 }
